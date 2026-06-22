@@ -528,3 +528,77 @@ jedyne zmiany to `"id"` (cell UUID, losowy per build run) — zero zmian
 tresci, zero regresji.
 
 Hash commitu: patrz `git log -1 --oneline` po commicie tego bloku.
+
+## 2026-06-23 - Medi Block 6 - Module 4 expansion
+
+Rozbudowano `notebook_module_4()` w `scripts/build_materials_v1.py` (taski
+M4-01..M4-05 z `docs/06-notebook-review-and-expansion-tasks.md`):
+
+- M4-01: zamiast jednego `EXPLAIN`, trzy pary porownawcze z realnymi
+  liczbami wierszy/kolumn obok `EXPLAIN FORMATTED`: (a) Silver `order_lines`
+  detail vs Gold `fact_sales_dashboard_monthly` aggregate, (b) Gold bez
+  filtra daty vs z filtrem daty (sprawdzenie `PushedFilters`), (c)
+  `SELECT *` vs wybrane kolumny na `fact_sales_dashboard`.
+- M4-02: sekcja Query Profile walkthrough - tabela (scan size, shuffle,
+  joins, czas) + krok-po-kroku jak powiazac wolny visual Power BI
+  (Performance Analyzer) z Query History w Databricks.
+- M4-03: rozbudowane cost guardrails - warehouse sizing, auto-stop,
+  tagging/budgets jako orientacja, + nowa sekcja "kto moze publikowac
+  raport DirectQuery i dlaczego to ma znaczenie kosztowe".
+- M4-04: rozbudowane Lakeflow Jobs wokol konkretnego DAG (validate ->
+  refresh_gold_dashboard -> refresh_incremental_view -> publish), z
+  tabelami task types, triggers (schedule / file arrival / table update /
+  manual), retry vs repair run, i Jobs vs Lakeflow Pipelines. Notebook
+  jawnie stwierdza, ze nie buduje ani nie uruchamia zywego Joba (zgodnie z
+  zakresem orientacyjnym z `docs/04-pre-implementation-analysis.md`).
+- M4-05: poprawiono `bundle/databricks.yml` (generowany przez
+  `write_bundle()`, nie edytowany recznie) - dodano `source: WORKSPACE` do
+  kazdego `notebook_task`, dodano `trigger.periodic` (orientacyjnie),
+  dodano czwarty task `refresh_incremental_view` spojny z DAG-iem z
+  notebooka, dodano komentarz ze plik nie byl wdrazany na zywym
+  workspace. Notebook dodaje sekcje "Validating the bundle" z komenda
+  `databricks bundle validate -t dev` jawnie oznaczona jako nieuruchomiona.
+
+Wszystkie 5 obrazow (`query_profile_reading_map.png`,
+`sql_warehouse_cost_decision.png`, `lakeflow_job_dag.png`,
+`dabs_deployment_flow.png`, `automation_readiness_checklist.png`) byly juz
+w `assets/images/` - zaden nowy obraz nie byl potrzebny, ale
+`sql_warehouse_cost_decision.png` nie byl wczesniej uzyty w Module 4 i
+zostal dolaczony (M4-03).
+
+Cell count: 15 -> 25 (target 20-26).
+
+### Weryfikacja
+
+```
+.venv/bin/python scripts/build_materials_v1.py
+# -> "Built Databricks-Data-Analyst-Medi v1 materials" (bez bledow)
+
+nbformat.read + nbformat.validate: PASS dla
+m4_performance_automation_cicd_orientation.ipynb
+Total cells: 25 (12 code, 13 markdown), compile errors = 0
+
+yaml.safe_load(bundle/databricks.yml): PASS
+Top-level keys: ['bundle', 'variables', 'resources', 'targets']
+Job tasks: ['validate_sources', 'refresh_gold', 'build_bi_dataset',
+  'refresh_incremental_view']
+All tasks have source: WORKSPACE: True
+Targets: ['dev', 'prod']
+```
+
+Grep proof: `precheck_cell`/`required_tables` obecny (2x); `EXPLAIN
+FORMATTED` 8x (3 pary x EXPLAIN-przed/po, jedna para ma dodatkowy
+row-count code cell); `Pair (a)/(b)/(c)` etykiety obecne; wszystkie 5
+obrazow odwolane w tresci notebooka; tresci o task types/trigger/retry/
+repair run Lakeflow Jobs (15 trafien `task type|trigger|retry|repair run`,
+case-insensitive); notebook jawnie stwierdza "We have **not** run this
+command against a live [workspace]" - zero twierdzen o realnym wdrozeniu.
+
+Pelny `git status --short` pokazal zmiany w 13 plikach (11 notebookow +
+generator + `bundle/databricks.yml`). Dla 10 z 11 notebookow (wszystkie
+poza `m4_*`) zweryfikowano linia-po-linii z `git diff -- <plik> | grep -v
+'"id":'`: 0 niezerowych linii diff poza `"id"` - zero zmian tresci, zero
+regresji. Pelny sweep `nbformat.validate` + `ast.parse` po wszystkich
+code cellach we wszystkich 11 notebookach repo: PASS, 0 bledow kompilacji.
+
+Hash commitu: patrz `git log -1 --oneline` po commicie tego bloku.

@@ -1,5 +1,9 @@
 # Reference DABs / Declarative Automation Bundles example.
 # Validate against the current Databricks CLI/docs before live use.
+# This file has NOT been deployed or run against a live workspace - see
+# Module 4 (notebooks/m4_performance_automation_cicd_orientation.ipynb) for
+# the `databricks bundle validate` instructions and the orientation-level
+# scope note.
 
 bundle:
   name: retailhub_kpi_dashboard
@@ -13,24 +17,38 @@ resources:
   jobs:
     refresh_gold_bi_dataset:
       name: refresh_gold_bi_dataset
+      trigger:
+        periodic:
+          interval: 1
+          unit: DAYS
       tasks:
         - task_key: validate_sources
           notebook_task:
             notebook_path: ../notebooks/m1_sql_warehouse_notebooks.ipynb
+            source: WORKSPACE
         - task_key: refresh_gold
           depends_on:
             - task_key: validate_sources
           notebook_task:
             notebook_path: ../notebooks/m2_gold_kpi_best_practices.ipynb
+            source: WORKSPACE
         - task_key: build_bi_dataset
           depends_on:
             - task_key: refresh_gold
           notebook_task:
             notebook_path: ../notebooks/m3_powerbi_semantic_dataset.ipynb
+            source: WORKSPACE
+        - task_key: refresh_incremental_view
+          depends_on:
+            - task_key: build_bi_dataset
+          notebook_task:
+            notebook_path: ../notebooks/m4_performance_automation_cicd_orientation.ipynb
+            source: WORKSPACE
 
 targets:
   dev:
     mode: development
+    default: true
     variables:
       catalog: training_dbx_ana_medi_dev
   prod:

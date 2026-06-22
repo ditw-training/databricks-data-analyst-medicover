@@ -2541,7 +2541,8 @@ def notebook_module_4() -> None:
 ![Query profile reading map](../assets/images/query_profile_reading_map.png)
 
 This is production-readiness orientation. We do not build a full CI/CD lab, but
-we show what should be automated and how it can be described as code.
+we show what should be automated, what costs money, and how a deployment can
+be described as code.
 """),
         code_cell("""%run ../setup/00_setup"""),
         md_cell("""## Runtime pre-check
@@ -2549,22 +2550,30 @@ we show what should be automated and how it can be described as code.
 Run Modules 2 and 3 first. This module compares detail vs aggregate query
 patterns and references the BI-ready objects.
 """),
-        code_cell("""required_objects = [
-    f"{GOLD}.fact_sales_dashboard_monthly",
-    f"{GOLD}.v_fact_sales_incremental",
-]
+        precheck_cell(
+            [
+                "{GOLD}.fact_sales_dashboard",
+                "{GOLD}.fact_sales_dashboard_monthly",
+                "{GOLD}.v_fact_sales_incremental",
+            ],
+            "notebooks/m3_powerbi_semantic_dataset.ipynb",
+        ),
+        md_cell("""## 1. Before/after performance - three comparison pairs
 
-missing = [table for table in required_objects if not spark.catalog.tableExists(table)]
-if missing:
-    raise Exception("Missing objects. Run Modules 2 and 3 first: " + ", ".join(missing))
+A DirectQuery report re-runs SQL on every click. Three independent decisions
+change how expensive that SQL is: which layer you query, whether you filter,
+and which columns you select. We look at each in isolation with
+`EXPLAIN FORMATTED` and row counts, not just narration.
 
-print("[OK] Performance demo objects exist")"""),
-        md_cell("""## Before/after performance
+### Pair (a): Silver detail-level vs Gold aggregate
 
-Bad pattern: DirectQuery report scans detailed Silver rows on every interaction.
-Better pattern: query Gold aggregate for summary pages and detail view only for
-drill-through.
+Same business question - "revenue by category" - answered two ways.
 """),
+        code_cell('''silver_rows = spark.sql(f"SELECT COUNT(*) AS n FROM {SILVER}.order_lines").first()["n"]
+gold_monthly_rows = spark.sql(f"SELECT COUNT(*) AS n FROM {GOLD}.fact_sales_dashboard_monthly").first()["n"]
+print("Rows scanned worst-case, Silver detail :", silver_rows)
+print("Rows scanned worst-case, Gold monthly  :", gold_monthly_rows)
+print("Reduction factor                       :", round(silver_rows / gold_monthly_rows, 1), "x")'''),
         code_cell('''spark.sql(f"""
 EXPLAIN FORMATTED
 SELECT category, SUM(line_revenue) AS revenue
@@ -2578,46 +2587,232 @@ SELECT category, SUM(revenue) AS revenue
 FROM {GOLD}.fact_sales_dashboard_monthly
 GROUP BY category
 """).show(80, truncate=False)'''),
-        md_cell("""## Query profile reading
+        md_cell("""Training message: compare the `Statistics` lines in both formatted plans (look
+for `sizeInBytes` / row count estimates). The Silver plan scans every order
+line and aggregates at query time; the Gold plan scans a table that is
+already small because the aggregation happened once, at refresh time, not on
+every Power BI click.
 
-Use the map at the top of this notebook with the real Databricks Query Profile.
-The training goal is to connect what participants see in the plan to an action:
+### Pair (b): no date filter vs date filter
 
-- large scan -> Gold aggregate or narrower columns,
-- shuffle -> pre-aggregation or different grain,
-- slow join -> star model or BI-ready table,
-- many tiny files -> OPTIMIZE / predictive optimization,
-- repeated DirectQuery -> Import or cache-friendly aggregate.
+Same Gold table, same grain. The only difference is a `WHERE` clause that
+should fold into a partition/file-level predicate.
 """),
-        md_cell("""## Practical optimization checklist
+        code_cell('''spark.sql(f"""
+EXPLAIN FORMATTED
+SELECT customer_region, SUM(revenue) AS revenue
+FROM {GOLD}.fact_sales_dashboard_monthly
+GROUP BY customer_region
+""").show(80, truncate=False)'''),
+        code_cell('''spark.sql(f"""
+EXPLAIN FORMATTED
+SELECT customer_region, SUM(revenue) AS revenue
+FROM {GOLD}.fact_sales_dashboard_monthly
+WHERE year_month >= date_format(add_months(current_date(), -3), 'yyyy-MM')
+GROUP BY customer_region
+""").show(80, truncate=False)'''),
+        code_cell('''rows_all = spark.sql(f"SELECT COUNT(*) AS n FROM {GOLD}.fact_sales_dashboard_monthly").first()["n"]
+rows_filtered = spark.sql(f"""
+SELECT COUNT(*) AS n FROM {GOLD}.fact_sales_dashboard_monthly
+WHERE year_month >= date_format(add_months(current_date(), -3), 'yyyy-MM')
+""").first()["n"]
+print("Rows without date filter :", rows_all)
+print("Rows with date filter    :", rows_filtered)'''),
+        md_cell("""Training message: in the formatted plan, look for the filter inside
+`PushedFilters` / the scan node rather than as a separate `Filter` operator
+above the scan - that is what "the predicate folds to Databricks" looks
+like. A Power BI relative-date slicer should generate exactly this shape of
+query; a slicer implemented as a client-side filter would not.
 
-| Technique | Training message |
+### Pair (c): `SELECT *` vs selecting only needed columns
+"""),
+        code_cell('''spark.sql(f"SELECT * FROM {GOLD}.fact_sales_dashboard").printSchema()
+all_cols = spark.sql(f"SELECT * FROM {GOLD}.fact_sales_dashboard").columns
+print("Columns returned by SELECT * :", len(all_cols))
+print("Columns a revenue-by-category visual actually needs : 3 (order_date, category, line_revenue)")'''),
+        code_cell('''spark.sql(f"""
+EXPLAIN FORMATTED
+SELECT * FROM {GOLD}.fact_sales_dashboard
+WHERE is_completed = true
+""").show(80, truncate=False)'''),
+        code_cell('''spark.sql(f"""
+EXPLAIN FORMATTED
+SELECT order_date, category, line_revenue FROM {GOLD}.fact_sales_dashboard
+WHERE is_completed = true
+""").show(80, truncate=False)'''),
+        md_cell("""Training message: Delta is columnar, so a narrower `SELECT` reads fewer
+column chunks per file - check the `ColumnarToRow` / scan node's column list
+in each formatted plan. A Power BI dataset built on `SELECT *` against a wide
+fact table pays this cost on every refresh or every DirectQuery click, even
+when the report only ever shows three fields.
+"""),
+        md_cell("""## 2. Query Profile walkthrough
+
+![Query profile reading map](../assets/images/query_profile_reading_map.png)
+
+This is what the trainer demonstrates live in the Databricks UI (Query
+History -> a query -> "View query profile"), connected back to the plans
+above:
+
+| What you see in Query Profile | What it means | What to do |
+|---|---|---|
+| Scan size / bytes read | how much data the query touched before filtering | narrower columns, Gold aggregate, partition pruning |
+| Shuffle (exchange) time | data was reshuffled across executors, usually for a `GROUP BY` or join | pre-aggregate, or pick a grain closer to the report |
+| Join nodes and their row counts | a join multiplied rows instead of just matching them | check for fan-out, prefer the denormalized BI-ready table |
+| Total time vs queued time | time waiting for the SQL Warehouse vs time actually running | warehouse sizing / concurrency, not query rewriting |
+| Number of files read | many small files inflate scan overhead | `OPTIMIZE`, predictive optimization, fewer/larger files |
+
+### Connecting a slow Power BI visual back to Query History
+
+1. In Power BI, identify the slow visual (Performance Analyzer shows which
+   visual issued the slow query and its duration).
+2. Copy the DAX/SQL query text Performance Analyzer reports for that visual.
+3. In Databricks, open **SQL Warehouses -> Query History** and filter by time
+   window and by the warehouse the Power BI dataset connects to.
+4. Match the query by its `SELECT` shape (columns, filters) - DirectQuery
+   queries are generated automatically and are usually recognizable by table
+   name and the visual's filter context.
+5. Open that query's profile and read it using the table above.
+6. Decide the fix using the same three levers as the comparison pairs:
+   layer (Silver vs Gold), filter (does it fold?), and columns (narrow vs
+   `SELECT *`).
+"""),
+        md_cell("""## 3. Cost guardrails
+
+![SQL Warehouse cost decision](../assets/images/sql_warehouse_cost_decision.png)
+
+Use `docs/templates/cost-awareness-checklist.md` as the working artifact.
+The key training message: live BI is not free. It changes the warehouse usage
+pattern from scheduled refresh (one batch query per day) to interactive query
+fan-out (one query per visual per click, for every concurrent viewer).
+
+| Guardrail | Orientation-level guidance |
 |---|---|
-| Column pruning | do not feed Power BI `SELECT *` sources |
-| Predicate pushdown | date filters must fold to Databricks |
-| Monthly aggregate | summary visuals should not scan line grain |
-| OPTIMIZE / stats | physical layout helps, but does not replace good modelling |
-| Warehouse sizing | size is a trade-off between runtime and DBU/h |
+| Warehouse sizing | start small (e.g. X-Small/Small Serverless or Pro), scale up only if Query Profile shows queueing, not just slow individual queries |
+| Auto-stop | set a short idle timeout (minutes, not hours) for demo/dev warehouses; production BI warehouses balance auto-stop against cold-start latency for the first viewer |
+| Tagging / budgets | tag warehouses and jobs by team/project/environment so billing can be attributed; treat budgets as an orientation topic - actual budget policy is platform-team owned |
+| DirectQuery report governance | DirectQuery multiplies query volume by every report viewer and every interaction; publishing a DirectQuery-mode report should go through the same review as adding a new scheduled job, because it changes warehouse load the same way an extra job would |
+
+### Who can publish a DirectQuery report, and why it matters for cost
+
+A Power BI report set to DirectQuery is not just a viewing artifact - every
+person who opens it and every filter they touch becomes a live query against
+the SQL Warehouse. Treat publishing a DirectQuery-mode report as a
+governed action, not a self-service click:
+
+- restrict **publish** rights on the workspace/app to people who understand
+  the cost trade-off (data team, BI lead), not all report authors;
+- require a quick check before publish: does this report query a Gold
+  aggregate (cheap, the default) or a wide/detail table (expensive, the
+  exception, per Module 3's Import-vs-DirectQuery decision table);
+- monitor warehouse spend after a new DirectQuery report ships, the same way
+  you would monitor cost after adding a new scheduled job - both add
+  recurring, automated query load.
 """),
-        md_cell("""## Lakeflow Job DAG
+        md_cell("""## 4. Lakeflow Jobs
 
 ![Lakeflow Job DAG](../assets/images/lakeflow_job_dag.png)
+
+Worked example: a DAG that validates source data, transforms it, and then
+refreshes `gold.fact_sales_dashboard` and `gold.v_fact_sales_incremental` -
+the same two objects this module's pre-check depends on.
+
+```
+validate_sources  ->  refresh_gold_dashboard  ->  refresh_incremental_view  ->  publish_bi_ready_flag
+```
+
+### Task types
+
+| Task type | Use for |
+|---|---|
+| Notebook task | the validation/transform/refresh steps shown above - most of this course's pipeline |
+| SQL task | a single SQL statement or query against a SQL Warehouse, e.g. a quality-gate check |
+| Lakeflow Pipeline task | a declarative pipeline (see "Jobs vs Pipelines" below) as one node inside a larger Job |
+| Python script / wheel task | packaged code, useful once logic moves out of notebooks into a library |
+| dbt task / condition task | dbt project runs, or branch the DAG on a condition (e.g. skip refresh if no new data) |
+
+### Triggers
+
+| Trigger | When to use it |
+|---|---|
+| Schedule (cron) | predictable batch refresh, e.g. nightly Gold refresh before the morning BI standup |
+| File arrival | upstream lands files in a volume/external location on its own schedule; the Job reacts instead of polling |
+| Table update | a Lakeflow Pipeline or upstream job updates a Delta table; this Job's DAG should only re-run when that table actually changed |
+| Manual / API | ad hoc runs, backfills, or triggering from an external orchestrator |
+
+For the worked DAG above, a **table update** trigger on the Silver tables
+(or a **schedule** if Silver itself lands on a schedule) is the natural fit:
+re-refresh Gold only when the data that feeds it actually changed.
+
+### Retry and repair run
+
+- **Retry**: configure automatic retries per task (e.g. 1-2 retries with a
+  short backoff) for transient failures - a warehouse cold-start timeout, a
+  brief network blip. Do not blindly retry a task that fails on bad data;
+  that just repeats the same failure.
+- **Repair run**: when a Job run fails partway through the DAG, "Repair run"
+  re-runs only the failed task and any downstream tasks, reusing the
+  successful upstream results instead of re-running the whole DAG from
+  `validate_sources`. For the worked example, if `refresh_incremental_view`
+  fails after `refresh_gold_dashboard` already succeeded, repair run skips
+  re-doing the Gold refresh.
+- Design tasks to be **idempotent** (`CREATE OR REPLACE TABLE`, `MERGE`, not
+  blind `INSERT`) specifically so retries and repair runs are safe to re-run.
+
+### Jobs vs Lakeflow Pipelines
+
+| | Lakeflow Jobs | Lakeflow Pipelines |
+|---|---|---|
+| Shape | orchestrates a DAG of heterogeneous tasks (notebook, SQL, pipeline, script) | declarative dataflow for one Medallion-style pipeline (streaming tables / materialized views) |
+| Best for | "run these steps in this order, on this trigger, with retries" | "keep these Bronze/Silver/Gold tables continuously correct from a defined dataflow graph" |
+| In our worked example | the outer orchestrator: validate -> transform -> refresh -> publish | could implement the validate/transform steps internally, then appear as one task inside the Job |
+
+Orientation note: this course does not build or run a live Lakeflow Job. The
+DAG above is a worked example for discussion, matching the project's stated
+scope (orientation, not a hands-on automation lab).
 """),
-        md_cell("""## DABs deployment flow
+        md_cell("""## 5. DABs (Databricks Asset Bundles) deployment flow
 
 ![DABs deployment flow](../assets/images/dabs_deployment_flow.png)
 
-Reference file: `bundle/databricks.yml`.
+Reference file: `bundle/databricks.yml` - a `dev`/`prod` bundle that deploys
+the `refresh_gold_bi_dataset` Job from the worked example above. The bundle
+uses current Databricks CLI bundle conventions: top-level `bundle`,
+`resources.jobs.<job_key>.tasks[].notebook_task` with explicit
+`source: WORKSPACE` per task, and `targets.<name>.mode` /
+`targets.<name>.variables` for environment overrides.
 """),
-        md_cell("""## Automation readiness checklist
+        code_cell('''with open("../bundle/databricks.yml") as f:
+    print(f.read())'''),
+        md_cell("""### Validating the bundle - command shown, not executed against a live workspace
+
+```bash
+databricks bundle validate -t dev
+```
+
+This checks the bundle's syntax and resolves variables/targets without
+deploying anything. We have **not** run this command against a live
+Databricks workspace as part of building this course - treat it as the
+documented next step for whoever owns deployment, not as a tested result.
+Deploying would additionally require:
+
+```bash
+databricks bundle deploy -t dev
+```
+
+which we likewise do not run here - this stays an orientation reference, not
+a hands-on CI/CD lab.
+"""),
+        md_cell("""## 6. Automation readiness checklist
 
 ![Automation readiness checklist](../assets/images/automation_readiness_checklist.png)
-"""),
-        md_cell("""## Refresh strategy
 
-Use `docs/templates/refresh-strategy.md`.
+Use `docs/templates/refresh-strategy.md` and
+`docs/templates/cost-awareness-checklist.md` together when deciding whether a
+report is ready to move from "ad hoc Import" to "scheduled Job" or "live
+DirectQuery".
 
-Recommended DAG:
+Recommended DAG (matches the worked Lakeflow Jobs example above):
 
 1. Validate source data.
 2. Refresh Gold model.
@@ -2633,22 +2828,18 @@ Important operational ideas:
 - job parameters for dev/test/prod,
 - owner notification when certification fails.
 """),
-        md_cell("""## Cost guardrails
-
-Use `docs/templates/cost-awareness-checklist.md`.
-
-The key training message: live BI is not free. It changes the warehouse usage
-pattern from scheduled refresh to interactive query fan-out.
-"""),
         md_cell("""## Long-form delivery extension
 
 If you need to stretch toward 9 hours, use these extra prompts:
 
-- compare the two `EXPLAIN FORMATTED` plans line by line,
+- compare all three pairs of `EXPLAIN FORMATTED` plans line by line and have
+  participants point at the `Statistics` / `PushedFilters` lines that prove
+  the difference,
 - ask participants to decide which DAG task should fail-fast,
-- convert one workshop decision into a `bundle/databricks.yml` parameter,
+- convert one workshop decision into a `bundle/databricks.yml` variable,
 - sketch dev/test/prod promotion on the DABs diagram,
-- discuss how Power BI live pages affect SQL Warehouse auto-stop and concurrency.
+- discuss how Power BI live pages affect SQL Warehouse auto-stop and
+  concurrency, and who should be allowed to publish a DirectQuery report.
 """),
     ]
     write_notebook(ROOT / "notebooks/m4_performance_automation_cicd_orientation.ipynb", cells)
@@ -3393,6 +3584,10 @@ Fill the `docs/templates/cost-awareness-checklist.md` shape for this report.
 def write_bundle() -> None:
     text = """# Reference DABs / Declarative Automation Bundles example.
 # Validate against the current Databricks CLI/docs before live use.
+# This file has NOT been deployed or run against a live workspace - see
+# Module 4 (notebooks/m4_performance_automation_cicd_orientation.ipynb) for
+# the `databricks bundle validate` instructions and the orientation-level
+# scope note.
 
 bundle:
   name: retailhub_kpi_dashboard
@@ -3406,24 +3601,38 @@ resources:
   jobs:
     refresh_gold_bi_dataset:
       name: refresh_gold_bi_dataset
+      trigger:
+        periodic:
+          interval: 1
+          unit: DAYS
       tasks:
         - task_key: validate_sources
           notebook_task:
             notebook_path: ../notebooks/m1_sql_warehouse_notebooks.ipynb
+            source: WORKSPACE
         - task_key: refresh_gold
           depends_on:
             - task_key: validate_sources
           notebook_task:
             notebook_path: ../notebooks/m2_gold_kpi_best_practices.ipynb
+            source: WORKSPACE
         - task_key: build_bi_dataset
           depends_on:
             - task_key: refresh_gold
           notebook_task:
             notebook_path: ../notebooks/m3_powerbi_semantic_dataset.ipynb
+            source: WORKSPACE
+        - task_key: refresh_incremental_view
+          depends_on:
+            - task_key: build_bi_dataset
+          notebook_task:
+            notebook_path: ../notebooks/m4_performance_automation_cicd_orientation.ipynb
+            source: WORKSPACE
 
 targets:
   dev:
     mode: development
+    default: true
     variables:
       catalog: training_dbx_ana_medi_dev
   prod:
