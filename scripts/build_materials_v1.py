@@ -61,6 +61,49 @@ def code_cell(source: str) -> dict:
     }
 
 
+def precheck_cell(required_tables: list[str], prereq_notebook: str) -> dict:
+    """Build a standardized pre-check code cell.
+
+    `required_tables` entries may reference notebook-scope variables (e.g.
+    `"{SILVER}.customers"`, `"{GOLD}.fact_sales"`) — each is emitted as an
+    f-string literal in the generated cell, so `{SILVER}`/`{GOLD}` resolve
+    against the notebook's own variables at runtime, exactly like the rest
+    of this codebase's generated SQL/Python.
+
+    Generates a code cell that asserts every table in `required_tables`
+    exists via `spark.catalog.tableExists`. If any are missing, it prints a
+    friendly message naming `prereq_notebook` as the notebook to run first,
+    then raises to stop execution (fail fast instead of confusing errors
+    later in the notebook).
+
+    Reuse plan: this helper currently powers the data-generator's own
+    upstream check (GLOBAL-01 first usage). It is intended to also replace
+    the duplicated inline `missing = [... tableExists ...]` blocks in
+    `notebook_module_2()`, `notebook_module_3()`, `notebook_module_4()` and
+    `notebook_workshop_1()/notebook_workshop_2()` in a later block — not
+    done yet, out of scope here.
+    """
+    tables_literal = ",\n    ".join(f'f"{t}"' for t in required_tables)
+    prereq_escaped = prereq_notebook.replace('"', '\\"')
+    source = f'''required_tables = [
+    {tables_literal},
+]
+
+missing = [t for t in required_tables if not spark.catalog.tableExists(t)]
+if missing:
+    print("[BLOCKED] Missing required tables:")
+    for t in missing:
+        print("  -", t)
+    print()
+    print("Run this notebook first: {prereq_escaped}")
+    raise Exception("Pre-check failed: missing prerequisite tables. Run \\"{prereq_escaped}\\" first.")
+
+print("[OK] Pre-check passed, all required tables exist:")
+for t in required_tables:
+    print("  -", t)'''
+    return code_cell(source)
+
+
 def write_notebook(path: Path, cells: list[dict]) -> None:
     nb = {
         "cells": cells,
@@ -1011,6 +1054,57 @@ This notebook builds the foundation for the Medi course:
 - starter Gold objects used by modules.
 """),
         code_cell("""%run ../setup/00_setup"""),
+        md_cell("""## GLOBAL-01: reusable pre-check helper
+
+`scripts/build_materials_v1.py` defines a generic `precheck_cell(required_tables, prereq_notebook)`
+helper next to `md_cell`/`code_cell`. It generates a standardized code cell
+that checks `spark.catalog.tableExists` for each required object and stops
+with a friendly message naming the prerequisite notebook if anything is
+missing. This is the first usage example; the same helper is meant to be
+reused by `notebook_module_2/3/4` and `notebook_workshop_1/2` in a later
+block to replace their current ad-hoc inline checks.
+
+Here it checks that the Bronze/Silver/Gold schemas from
+`setup/00_pre_config.ipynb` already exist before this notebook tries to
+write any data into them.
+"""),
+        code_cell("""# GLOBAL-01: pre-check that upstream setup ran before we generate data.
+schemas_seen = {r[0] for r in spark.sql(f"SHOW SCHEMAS IN {CATALOG}").collect()}
+required_schemas = [BRONZE_SCHEMA, SILVER_SCHEMA, GOLD_SCHEMA]
+missing_schemas = [s for s in required_schemas if s not in schemas_seen]
+
+if missing_schemas:
+    print("[BLOCKED] Missing required schemas in catalog", CATALOG, ":", missing_schemas)
+    print()
+    print("Run this notebook first: setup/00_pre_config.ipynb")
+    raise Exception("Pre-check failed: missing schemas. Run setup/00_pre_config.ipynb first.")
+
+print("[OK] Pre-check passed, schemas are ready:", required_schemas)"""),
+        md_cell("""## 0. Data contract
+
+This is the explicit contract for every Silver and Gold object this notebook
+creates. Treat it as the source of truth when writing SQL in later modules —
+if a query needs a column that is not listed here, check the grain first.
+
+| Obiekt | Grain | Klucze | Właściciel |
+|---|---|---|---|
+| `silver.customers` | one row per customer | PK `customer_id` | Data Engineering |
+| `silver.products` | one row per product | PK `product_id` | Data Engineering |
+| `silver.sales_orders` | one row per order (header) | PK `order_id`; FK `customer_id` -> `silver.customers` | Data Engineering |
+| `silver.order_lines` | one row per order line | FK `order_id` -> `silver.sales_orders`, `product_id` -> `silver.products`, `customer_id` -> `silver.customers` (denormalized for convenience) | Data Engineering |
+| `gold.dim_date` | one row per calendar day | PK `date_key` | Analytics Engineering |
+| `gold.dim_product` | one row per product | PK `product_id` | Analytics Engineering |
+| `gold.dim_customer` | one row per customer | PK `customer_id` | Analytics Engineering |
+| `gold.fact_sales` | one row per order line | FK `order_id`, `product_id`, `customer_id`; no enforced PK (line-grain fact) | Analytics Engineering |
+| `gold.kpi_daily` | one row per `order_date` | PK `order_date` | Analytics Engineering |
+| `gold.revenue_monthly` | one row per `year_month` x `region` x `category` | PK (`year_month`, `region`, `category`) | Analytics Engineering |
+
+Note: `silver.order_lines.customer_id` is intentionally denormalized from the
+order header so `gold.fact_sales` can read it directly without an extra join.
+This was the source of a bug fixed earlier in the build (see
+`docs/build-log.md`) — keep `order_lines` and `sales_orders` customer_id in
+sync when changing the generator.
+"""),
         code_cell("""from pyspark.sql import functions as F
 
 spark.sql(f"USE CATALOG {CATALOG}")
@@ -1049,7 +1143,19 @@ print("Silver products :", products.count())"""),
         md_cell("""## 2. Orders and controlled quality issues
 
 The dataset intentionally includes bad rows. They are visible enough for
-training, but small enough not to dominate the scenario.
+training, but small enough not to dominate the scenario. Each issue below is
+seeded with a deterministic modulo rule so it reproduces the same way every
+time the generator runs:
+
+| Issue | Where | Rule |
+|---|---|---|
+| Future-dated order | `silver.sales_orders.order_date` | `order_id % 997 = 0` |
+| Out-of-dictionary status | `silver.sales_orders.status` | `order_id % 101 = 0` -> `'Unknown'` |
+| Missing `unit_price` | `silver.order_lines.unit_price` | `line_id % 1543 = 0` |
+| Exact duplicate `(order_id, product_id)` row | `silver.order_lines` | `line_id % 10007 = 0`, re-inserted with a new `line_id` |
+| Orphan `customer_id` (no match in `silver.customers`) | `silver.order_lines.customer_id` | `line_id % 4001 = 0` |
+| Orphan `product_id` (no match in `silver.products`) | `silver.order_lines.product_id` | `line_id % 3001 = 0` |
+| Header vs lines revenue mismatch | `silver.sales_orders.order_total_amount` | `order_id % 401 = 0` |
 """),
         code_cell("""orders = (
     spark.range(1, 120001).withColumnRenamed("id", "order_id")
@@ -1072,8 +1178,6 @@ orders = orders.withColumn(
     F.when(F.col("order_id") % 997 == 0, F.date_add(F.current_date(), 30)).otherwise(F.col("order_date"))
 )
 
-orders.write.mode("overwrite").format("delta").saveAsTable(f"{SILVER}.sales_orders")
-
 line_base = spark.range(1, 360001).withColumnRenamed("id", "line_id")
 order_lines = (
     line_base
@@ -1089,23 +1193,84 @@ order_lines = (
     .withColumn("line_margin", F.round(F.col("line_revenue") - F.col("line_cost"), 2))
 )
 
-# Controlled duplicate issue.
+# Controlled duplicate issue: re-insert a full row with the same (order_id,
+# product_id) pair under a new line_id, so it is a genuine exact duplicate
+# of business keys, not just a near-duplicate.
 duplicates = order_lines.filter("line_id % 10007 = 0").withColumn("line_id", F.col("line_id") + F.lit(10000000))
 order_lines = order_lines.unionByName(duplicates)
 
+# Controlled orphan-reference issues: point a handful of lines at customer_id
+# / product_id values that are outside the valid dimension ranges
+# (customers are 1..10000, products are 1..500), so dimension joins from
+# these lines will not match in silver.customers / silver.products.
+order_lines = order_lines.withColumn(
+    "customer_id",
+    F.when(F.col("line_id") % 4001 == 0, F.lit(900000000).cast("long")).otherwise(F.col("customer_id")),
+)
+order_lines = order_lines.withColumn(
+    "product_id",
+    F.when(F.col("line_id") % 3001 == 0, F.lit(900000000).cast("long")).otherwise(F.col("product_id")),
+)
+
 order_lines.write.mode("overwrite").format("delta").saveAsTable(f"{SILVER}.order_lines")
+
+# FND-03(b): RetailHub's order header does not natively carry a total
+# amount. We add a minimal header-level `order_total_amount` column so the
+# header-vs-lines reconciliation check is meaningful (a common real-world DQ
+# check: does the source system's order total match what the line items sum
+# to?). For most orders the header total is computed as the exact sum of its
+# completed line revenue (so it reconciles). For orders where
+# `order_id % 401 = 0` we seed a deliberate mismatch by inflating the header
+# total by a fixed amount, simulating a stale/incorrectly-entered header
+# total from the source system.
+line_totals = order_lines.groupBy("order_id").agg(F.sum("line_revenue").alias("lines_revenue_sum"))
+orders = (
+    orders.join(line_totals, "order_id", "left")
+    .withColumn("lines_revenue_sum", F.coalesce(F.col("lines_revenue_sum"), F.lit(0.0)))
+    .withColumn(
+        "order_total_amount",
+        F.when(F.col("order_id") % 401 == 0, F.round(F.col("lines_revenue_sum") + F.lit(50.0), 2))
+         .otherwise(F.round(F.col("lines_revenue_sum"), 2)),
+    )
+    .drop("lines_revenue_sum")
+)
+
+orders.write.mode("overwrite").format("delta").saveAsTable(f"{SILVER}.sales_orders")
 
 print("Silver sales_orders:", orders.count())
 print("Silver order_lines :", order_lines.count())"""),
+        md_cell("""## FND-04: table comments
+
+`CREATE OR REPLACE TABLE ... COMMENT '...' AS SELECT ...` (used below for the
+Gold CTAS objects) and `COMMENT ON TABLE` (used for the Silver tables, since
+they are written with `saveAsTable` rather than CTAS) are both table-level
+and universally supported across current Databricks Runtime / Unity Catalog
+versions. Column-level comments (`COMMENT ON COLUMN ...` or inline
+`col TYPE COMMENT '...'` in a `CREATE TABLE` column list) are a nice-to-have
+on top of this — add them later if the target Databricks Runtime / SQL
+Warehouse supports it in your workspace; we deliberately keep this block to
+table-level comments only, since that is the part guaranteed to work
+everywhere.
+"""),
+        code_cell('''spark.sql(f"COMMENT ON TABLE {SILVER}.customers IS 'Silver master data: one row per RetailHub customer. Source of truth for customer attributes used by gold.dim_customer.'")
+spark.sql(f"COMMENT ON TABLE {SILVER}.products IS 'Silver master data: one row per RetailHub product. Source of truth for product attributes used by gold.dim_product.'")
+spark.sql(f"COMMENT ON TABLE {SILVER}.sales_orders IS 'Silver order header: one row per order, including the order_total_amount header total used for header-vs-lines revenue reconciliation checks.'")
+spark.sql(f"COMMENT ON TABLE {SILVER}.order_lines IS 'Silver order line detail: one row per order line. Contains the controlled data-quality issues used in the bad data lab (missing prices, duplicates, orphan references).'")
+
+print("[OK] Silver table comments set")'''),
         md_cell("""## 3. Starter Gold objects"""),
         code_cell('''spark.sql(f"""
-CREATE OR REPLACE TABLE {GOLD}.dim_date AS
+CREATE OR REPLACE TABLE {GOLD}.dim_date
+COMMENT 'Gold date dimension: one row per calendar day, 2024-01-01 to 2026-12-31. Used to join fact tables to calendar attributes.'
+AS
 SELECT
   explode(sequence(to_date('2024-01-01'), to_date('2026-12-31'), interval 1 day)) AS date_key
 """)
 
 spark.sql(f"""
-CREATE OR REPLACE TABLE {GOLD}.dim_date AS
+CREATE OR REPLACE TABLE {GOLD}.dim_date
+COMMENT 'Gold date dimension: one row per calendar day, 2024-01-01 to 2026-12-31. Used to join fact tables to calendar attributes.'
+AS
 SELECT
   date_key,
   year(date_key) AS year,
@@ -1116,19 +1281,25 @@ FROM {GOLD}.dim_date
 """)
 
 spark.sql(f"""
-CREATE OR REPLACE TABLE {GOLD}.dim_product AS
+CREATE OR REPLACE TABLE {GOLD}.dim_product
+COMMENT 'Gold product dimension: one row per product, conformed for BI consumption.'
+AS
 SELECT product_id, product_name, category, subcategory, unit_cost, unit_price, is_active
 FROM {SILVER}.products
 """)
 
 spark.sql(f"""
-CREATE OR REPLACE TABLE {GOLD}.dim_customer AS
+CREATE OR REPLACE TABLE {GOLD}.dim_customer
+COMMENT 'Gold customer dimension: one row per customer, conformed for BI consumption.'
+AS
 SELECT customer_id, customer_name, city, region, country, segment, created_date
 FROM {SILVER}.customers
 """)
 
 spark.sql(f"""
-CREATE OR REPLACE TABLE {GOLD}.fact_sales AS
+CREATE OR REPLACE TABLE {GOLD}.fact_sales
+COMMENT 'Gold fact table at order-line grain. Source of truth for sales KPIs (revenue, margin, orders). One row per silver.order_lines row.'
+AS
 SELECT
   l.line_id,
   l.order_id,
@@ -1150,7 +1321,9 @@ FROM {SILVER}.order_lines l
 """)
 
 spark.sql(f"""
-CREATE OR REPLACE TABLE {GOLD}.kpi_daily AS
+CREATE OR REPLACE TABLE {GOLD}.kpi_daily
+COMMENT 'Gold daily KPI aggregate: one row per order_date, with revenue/margin/order counts for Completed and Returned orders. Pre-aggregated for fast dashboard queries.'
+AS
 SELECT
   order_date,
   SUM(CASE WHEN status = 'Completed' THEN line_revenue ELSE 0 END) AS revenue,
@@ -1162,7 +1335,9 @@ GROUP BY order_date
 """)
 
 spark.sql(f"""
-CREATE OR REPLACE TABLE {GOLD}.revenue_monthly AS
+CREATE OR REPLACE TABLE {GOLD}.revenue_monthly
+COMMENT 'Gold monthly revenue aggregate: one row per year_month x region x category. Used by Power BI summary visuals to avoid scanning fact_sales directly.'
+AS
 SELECT
   date_format(order_date, 'yyyy-MM') AS year_month,
   region,
@@ -1175,6 +1350,133 @@ GROUP BY date_format(order_date, 'yyyy-MM'), region, category
 
 print("[OK] Starter Gold objects created")'''),
         code_cell("""spark.sql(f"SHOW TABLES IN {GOLD}").show(truncate=False)"""),
+        md_cell("""## FND-02: inspect the real schema
+
+The data contract above is a claim. Confirm it against the actual schema of
+the two most important Gold objects before trusting it.
+"""),
+        code_cell("""spark.sql(f"DESCRIBE TABLE {GOLD}.fact_sales").show(truncate=False)"""),
+        code_cell("""spark.sql(f"DESCRIBE TABLE {GOLD}.dim_date").show(truncate=False)"""),
+        md_cell("""## FND-01: runtime pre-check
+
+This is the proof step. It is not enough that the cells above ran without an
+exception — confirm that every Silver/Gold table exists, has a sane row
+count, and that the seeded bad-data-lab problems are actually present in the
+data. If any assertion below fails, the bad data lab will not work as
+designed for later modules and workshops.
+"""),
+        code_cell("""# (a) Every Silver and Gold table exists.
+all_tables = [
+    f"{SILVER}.customers",
+    f"{SILVER}.products",
+    f"{SILVER}.sales_orders",
+    f"{SILVER}.order_lines",
+    f"{GOLD}.dim_date",
+    f"{GOLD}.dim_product",
+    f"{GOLD}.dim_customer",
+    f"{GOLD}.fact_sales",
+    f"{GOLD}.kpi_daily",
+    f"{GOLD}.revenue_monthly",
+]
+
+missing = [t for t in all_tables if not spark.catalog.tableExists(t)]
+assert not missing, f"Missing tables after generation: {missing}"
+print("[OK] (a) all Silver and Gold tables exist:", len(all_tables))"""),
+        code_cell("""# (b) Sane minimum row counts.
+min_rows = {
+    f"{SILVER}.customers": 9_000,
+    f"{SILVER}.products": 400,
+    f"{SILVER}.sales_orders": 100_000,
+    f"{SILVER}.order_lines": 300_000,
+    f"{GOLD}.dim_date": 1_000,
+    f"{GOLD}.dim_product": 400,
+    f"{GOLD}.dim_customer": 9_000,
+    f"{GOLD}.fact_sales": 300_000,
+    f"{GOLD}.kpi_daily": 600,
+    f"{GOLD}.revenue_monthly": 50,
+}
+
+row_counts = {t: spark.table(t).count() for t in min_rows}
+for table, minimum in min_rows.items():
+    assert row_counts[table] >= minimum, (
+        f"{table} has {row_counts[table]} rows, expected at least {minimum}"
+    )
+    print(f"[OK] (b) {table}: {row_counts[table]} rows (>= {minimum})")"""),
+        code_cell('''# (c) The seeded bad-data-lab problems are actually present, not just
+# happy-path data. These are the checks later modules and workshops rely on.
+null_price_count = spark.sql(f"SELECT COUNT(*) AS n FROM {SILVER}.order_lines WHERE unit_price IS NULL").first()["n"]
+assert null_price_count > 0, "Expected at least one order line with missing unit_price"
+print("[OK] (c1) missing unit_price rows:", null_price_count)
+
+bad_status_count = spark.sql(
+    f"SELECT COUNT(*) AS n FROM {SILVER}.sales_orders WHERE status NOT IN ('Completed','Returned','Cancelled')"
+).first()["n"]
+assert bad_status_count > 0, "Expected at least one out-of-dictionary order status"
+print("[OK] (c2) out-of-dictionary status rows:", bad_status_count)
+
+future_order_count = spark.sql(
+    f"SELECT COUNT(*) AS n FROM {SILVER}.sales_orders WHERE order_date > current_date()"
+).first()["n"]
+assert future_order_count > 0, "Expected at least one future-dated order"
+print("[OK] (c3) future-dated order rows:", future_order_count)
+
+exact_dup_count = spark.sql(f"""
+    SELECT COUNT(*) AS n FROM (
+        SELECT order_id, product_id, COUNT(*) AS cnt
+        FROM {SILVER}.order_lines
+        GROUP BY order_id, product_id
+        HAVING COUNT(*) > 1
+    )
+""").first()["n"]
+assert exact_dup_count > 0, "Expected at least one exact duplicate (order_id, product_id) pair"
+print("[OK] (c4) duplicate (order_id, product_id) pairs:", exact_dup_count)
+
+orphan_customer_count = spark.sql(f"""
+    SELECT COUNT(*) AS n FROM {SILVER}.order_lines l
+    LEFT ANTI JOIN {SILVER}.customers c ON l.customer_id = c.customer_id
+""").first()["n"]
+assert orphan_customer_count > 0, "Expected at least one orphan customer_id in order_lines"
+print("[OK] (c5) orphan customer_id rows:", orphan_customer_count)
+
+orphan_product_count = spark.sql(f"""
+    SELECT COUNT(*) AS n FROM {SILVER}.order_lines l
+    LEFT ANTI JOIN {SILVER}.products p ON l.product_id = p.product_id
+""").first()["n"]
+assert orphan_product_count > 0, "Expected at least one orphan product_id in order_lines"
+print("[OK] (c6) orphan product_id rows:", orphan_product_count)
+
+revenue_mismatch_count = spark.sql(f"""
+    SELECT COUNT(*) AS n FROM (
+        SELECT o.order_id, o.order_total_amount, SUM(l.line_revenue) AS lines_sum
+        FROM {SILVER}.sales_orders o
+        JOIN {SILVER}.order_lines l ON o.order_id = l.order_id
+        GROUP BY o.order_id, o.order_total_amount
+        HAVING ABS(o.order_total_amount - SUM(l.line_revenue)) > 0.01
+    )
+""").first()["n"]
+assert revenue_mismatch_count > 0, "Expected at least one header-vs-lines revenue mismatch"
+print("[OK] (c7) header-vs-lines revenue mismatches:", revenue_mismatch_count)
+
+print()
+print("[OK] FND-01 runtime pre-check passed: bad data lab confirmed working.")'''),
+        md_cell("""## GLOBAL-01: self-check using the reusable pre-check helper
+
+As a final proof that the helper itself works end to end, re-run the
+standardized `precheck_cell` check against all Gold objects this notebook
+just built. Module 2 onward can call the same generated pattern instead of
+hand-rolling table-existence checks.
+"""),
+        precheck_cell(
+            [
+                "{GOLD}.dim_date",
+                "{GOLD}.dim_product",
+                "{GOLD}.dim_customer",
+                "{GOLD}.fact_sales",
+                "{GOLD}.kpi_daily",
+                "{GOLD}.revenue_monthly",
+            ],
+            "data/generate_training_dataset.ipynb (this notebook)",
+        ),
     ]
     write_notebook(ROOT / "data/generate_training_dataset.ipynb", cells)
 

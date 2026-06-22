@@ -143,3 +143,78 @@
   - wszystkie notebooki parsują sie jako JSON,
   - niemagiczne komorki Python kompilują sie lokalnie,
   - 21 assetow obrazowych otwiera sie poprawnie.
+
+## Medi Block 1 — Foundation pre-checks (FND-01..04, GLOBAL-01)
+
+Zaimplementowano w `scripts/build_materials_v1.py`, funkcja
+`notebook_data_generator()` (`data/generate_training_dataset.ipynb`), oraz
+nowy generyczny helper `precheck_cell()` obok `md_cell`/`code_cell`.
+
+**FND-01 — runtime pre-check po generatorze.** Dodano 3 komorki na koncu
+notebooka: (a) `spark.catalog.tableExists` dla wszystkich 10 tabel
+Silver+Gold, (b) `assert` na minimalnej liczbie wierszy per tabela, (c) 7
+assercji potwierdzajacych, ze kontrolowane problemy jakosci faktycznie
+istnieja w danych: brakujace `unit_price`, status spoza slownika, zamowienie
+z data w przyszlosci, duplikat `(order_id, product_id)`, orphan
+`customer_id`, orphan `product_id`, mismatch header-vs-lines.
+
+**FND-02 — jawny data contract.** Dodano markdown z tabela
+`Obiekt | Grain | Klucze | Właściciel` dla wszystkich 10 obiektow
+Silver/Gold, plus 2 komorki `DESCRIBE TABLE` dla `gold.fact_sales` i
+`gold.dim_date`.
+
+**FND-03 — rozszerzony bad data lab.** Dodano: (a) orphan `customer_id` (co
+4001-szy `line_id`) i orphan `product_id` (co 3001-szy `line_id`) wskazujace
+na wartosci spoza zakresu wymiarow; (c) potwierdzono, ze istniejacy
+mechanizm duplikatow (`line_id % 10007 = 0`, re-insert z nowym `line_id`)
+jest faktycznym duplikatem na parze `(order_id, product_id)`, nie tylko
+near-duplicate — dodano jawna asercje.
+
+Decyzja projektowa (b) — revenue mismatch: schemat `silver.sales_orders`
+(header) nie mial wczesniej zadnego pola total. Zamiast dodawac sztuczny
+markdown "nie dotyczy", dodano minimalna, uzasadniona biznesowo kolumne
+`order_total_amount` w `silver.sales_orders`, liczona jako suma
+`line_revenue` z `silver.order_lines` dla danego zamowienia. Dla wiekszosci
+zamowien wartosc sie zgadza (rekoncyliuje). Dla zamowien gdzie
+`order_id % 401 = 0` header total jest celowo zawyzony o staly 50.0,
+symulujac nieaktualny/błędnie wprowadzony total z systemu źródłowego. To
+czyni check `ABS(header - SUM(lines)) > 0.01` sensownym cwiczeniem
+reconciliation zamiast pustego placeholdera.
+
+**FND-04 — table comments.** Dodano `COMMENT ON TABLE` dla 4 tabel Silver
+(`saveAsTable`, wiec `COMMENT ON TABLE` po zapisie) oraz `COMMENT '...'`
+inline w `CREATE OR REPLACE TABLE ... AS SELECT` dla wszystkich 6 obiektow
+Gold. Dodano markdown notke, ze `COMMENT ON COLUMN` to nice-to-have do
+dodania pozniej, jesli docelowy runtime/warehouse to wspiera — blok
+ogranicza sie do table-level comments (uniwersalnie wspierane).
+
+**GLOBAL-01 — reusable pre-check helper.** Nowa funkcja
+`precheck_cell(required_tables, prereq_notebook)` w
+`scripts/build_materials_v1.py` generuje standardowa komorke: sprawdza
+`spark.catalog.tableExists` dla kazdej tabeli, przy braku wypisuje czytelny
+komunikat z nazwa notebooka-prerequisite i rzuca wyjatek. Uzyta w
+`notebook_data_generator()` jako self-check na koncu (sprawdza 6 obiektow
+Gold po ich utworzeniu). W komentarzu w kodzie udokumentowano plan reuse w
+`notebook_module_2/3/4` i `notebook_workshop_1/2` w kolejnym bloku — nie
+zaimplementowano tam jeszcze, poza zakresem tego bloku.
+
+### Weryfikacja
+
+```
+.venv/bin/python scripts/build_materials_v1.py
+# -> "Built Databricks-Data-Analyst-Medi v1 materials" (bez bledow)
+
+nbformat.read(as_version=4) + nbformat.validate(): PASS
+data/generate_training_dataset.ipynb: 24 cells (10 markdown, 14 code)
+Niemagiczne komorki Python skompilowane: 13/13 OK (1 magic %run pominieta)
+
+Walidacja WSZYSTKICH notebookow w repo (nbformat + compile): 11/11 PASS
+(data/generate_training_dataset.ipynb, m1-m4, setup x2, w1/w2 exercise+solution)
+```
+
+Grep proof: markdown z tabela data contract obecny, `COMMENT ON TABLE`
+(4x Silver) i `COMMENT '...'` (6x Gold CTAS, lacznie 9+ wystapien `COMMENT '`
+licząc helper-markdown), orphan reference checks (`LEFT ANTI JOIN` x2),
+revenue mismatch (`order_total_amount`, `revenue_mismatch_count`), exact
+duplicate (`exact_dup_count`, `HAVING COUNT`), 9x `assert` w FND-01 blokach,
+`precheck_cell` zdefiniowany raz i wywolany raz w generatorze.
