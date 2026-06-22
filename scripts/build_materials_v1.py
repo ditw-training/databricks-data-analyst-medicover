@@ -2208,38 +2208,134 @@ only the measures and interactions that belong in the report.
 Run Module 2 first. This notebook expects the dashboard fact and monthly
 aggregate to exist.
 """),
-        code_cell("""required_tables = [
-    f"{GOLD}.fact_sales_dashboard",
-    f"{GOLD}.fact_sales_dashboard_monthly",
-]
-
-missing = [table for table in required_tables if not spark.catalog.tableExists(table)]
-if missing:
-    raise Exception("Missing BI-ready Gold tables. Run Module 2 first: " + ", ".join(missing))
-
-print("[OK] BI-ready Gold tables exist")"""),
-        md_cell("""## Import vs live/DirectQuery
+        precheck_cell(
+            [
+                "{GOLD}.fact_sales_dashboard",
+                "{GOLD}.fact_sales_dashboard_monthly",
+            ],
+            "notebooks/m2_gold_kpi_best_practices.ipynb",
+        ),
+        md_cell("""## 1. Import vs live/DirectQuery - decision table
 
 ![Import vs DirectQuery](../assets/images/import_vs_directquery.png)
+
+Both modes read the same Gold tables. The difference is *when* and *how often*
+Databricks does the work.
+
+| Dimension | Import | DirectQuery / live |
+|---|---|---|
+| Where the query runs | once, at refresh time, into an in-memory Power BI model | every time a user opens a page or changes a filter |
+| Data freshness | as fresh as the last refresh (minutes to hours old) | as fresh as the warehouse, essentially real time |
+| SQL Warehouse load | one batch query per refresh | one query per visual per interaction |
+| Report responsiveness | fast, served from memory | depends on warehouse latency and concurrency |
+| Cost driver | scheduled refresh compute | every click, every filter change |
+| Best source shape | aggregate or curated table | small, well-indexed table or selective view |
+""" ),
+        md_cell("""### Query fan-out: why DirectQuery cost is not linear
+
+A Power BI page with 6 visuals does not send 1 query per refresh - it can send
+**1 query per visual per filter context**. A KPI card, a trend chart and a
+region bar chart on the same page each fire their own SQL query against the
+warehouse. Slicers and cross-filtering multiply this further: changing one
+slicer can re-trigger every visual that listens to it.
+
+```
+1 page, 6 visuals, 1 slicer change
+  -> up to 6 new SQL Warehouse queries per click
+  -> multiplied by every active report user
+```
+
+This is the **interaction cost** of DirectQuery: it scales with `visuals x
+filter changes x concurrent users`, not with data volume. Import mode pays
+this cost once, at refresh time, regardless of how many users click around
+afterwards.
+
+**When does live/DirectQuery make sense?**
+
+- an operational dashboard where "this morning's returns" must be exact, not
+  approximate to the last refresh,
+- a narrow page (1-3 visuals) against a small, pre-aggregated Gold object,
+- a controlled audience (few concurrent users) where warehouse cost is
+  predictable,
+- never as the default for a wide exploratory report with many slicers.
 """),
-        md_cell("""## Power BI connector context
+        md_cell("""## 2. Power BI connector context
 
 ![Power BI DirectQuery connector](../assets/images/source_powerbi_directquery_connector.webp)
 
-Use this as a visual walkthrough before opening Power BI Desktop. The key point
-for analysts: connector mode is a modelling decision, not just a technical
-checkbox.
+This is the real Power BI "Get Data" connector dialog for Databricks. Use it
+as a visual walkthrough before opening Power BI Desktop. The key point for
+analysts: connector mode (`Import` vs `DirectQuery`) is selected here, in the
+connector dialog, before any table is even chosen - it is a modelling
+decision, not just a technical checkbox.
 """),
-        md_cell("""## Connection walkthrough
+        md_cell("""## 3. Connection walkthrough (live Power BI Desktop)
 
 ![Power BI connection walkthrough](../assets/images/powerbi_connection_walkthrough.png)
 
-Trainer notes:
+Step-by-step, with exactly where each value comes from:
 
-- show where SQL Warehouse Server hostname and HTTP path live,
-- explain authentication before discussing tables,
-- select only Gold objects,
-- pick Import first unless a live use case is explicit.
+1. In Databricks, open the **SQL Warehouse** that will serve the report.
+2. Go to **Connection details** on the warehouse page and copy:
+   - **Server hostname** - looks like `dbc-xxxxxxxx-xxxx.cloud.databricks.com`,
+   - **HTTP path** - looks like `/sql/1.0/warehouses/xxxxxxxxxxxxxxxx`.
+3. In Power BI Desktop: **Get Data -> Databricks** (or **Azure Databricks**).
+4. Paste **Server hostname** and **HTTP path** into the connector dialog.
+5. Choose **Import** or **DirectQuery** *now* - this cannot be changed per
+   table later without redoing the connection.
+6. Authenticate (Azure AD / personal access token per your workspace policy).
+7. In the navigator, select **only Gold objects** - `fact_sales_dashboard_monthly`,
+   `v_fact_sales_incremental` (built below), `dim_date`, `dim_product`,
+   `dim_customer`. Do not browse into Silver or Bronze schemas.
+8. Click **Load** (Import) or **Transform Data** to shape column types first.
+
+Trainer notes: explain authentication before discussing which tables to pick,
+and default to Import unless a live use case from the decision table above is
+explicit.
+"""),
+        md_cell("""### Variant: no Power BI Desktop available
+
+Some training rooms cannot install or license Power BI Desktop. Per the
+project's own risk mitigation (`docs/04-pre-implementation-analysis.md`,
+Risk 3: "DirectQuery/live moze byc demo prowadzacego lub mock demo"), this
+module works without live Power BI access:
+
+- **Trainer demo (preferred when available):** the trainer runs the 8 steps
+  above live, on a shared screen, against this workspace's SQL Warehouse.
+  Participants follow along on the screenshots only.
+- **Mock walkthrough (no Power BI access for anyone):** narrate each step
+  against the screenshots in this notebook instead of clicking through a real
+  dialog:
+  1. Point at `source_powerbi_directquery_connector.webp` - "this is where you
+     choose Import vs DirectQuery, before picking any table."
+  2. Point at `powerbi_connection_walkthrough.png` step 2 - "Server hostname
+     and HTTP path always come from the SQL Warehouse Connection details tab,
+     never typed from memory."
+  3. Point at step 5 ("Choose mode") - "this single click decides whether the
+     warehouse is queried once per refresh or once per click for the rest of
+     the report's life."
+  4. Run the two SQL cells below in this notebook - they reproduce exactly
+     what Power BI would receive, so the data and the query shape are still
+     real even though no Power BI UI was opened.
+- Either way, every participant leaves with the same decision (mode per
+  table) recorded in the BI contract section further down.
+"""),
+        md_cell("""## 4. Incremental refresh: building `v_fact_sales_incremental`
+
+![Incremental refresh](../assets/images/incremental_refresh_range.png)
+
+**Requirements for the date column used in incremental refresh:**
+
+- must be a real `DATE` (or `TIMESTAMP`) column, not a string,
+- must not be null for rows that should ever be refreshed,
+- should be the column the business actually files transactions under
+  (here: `order_date`), so partition boundaries match reporting periods,
+- the source table/view must allow a `WHERE column >= X AND column < Y`
+  predicate to be pushed down efficiently (partitioning or clustering helps).
+
+`order_date` on `gold.fact_sales_dashboard` satisfies all four, so the
+incremental view below is built directly on top of it, with a 24-month
+rolling window to keep the detail table bounded.
 """),
         code_cell('''spark.sql(f"""
 CREATE OR REPLACE VIEW {GOLD}.v_fact_sales_incremental AS
@@ -2263,21 +2359,24 @@ WHERE order_date >= add_months(current_date(), -24)
 """)
 
 spark.sql(f"SELECT MIN(order_date), MAX(order_date), COUNT(*) FROM {GOLD}.v_fact_sales_incremental").show()'''),
-        md_cell("""## Incremental refresh design
+        md_cell("""### RangeStart / RangeEnd and the half-open interval
 
-![Incremental refresh](../assets/images/incremental_refresh_range.png)
-
-Power BI uses `RangeStart` and `RangeEnd` parameters. The recommended date
-filter is half-open:
+Power BI's incremental refresh policy injects two parameters into the query
+that defines a partition: `RangeStart` and `RangeEnd`. The recommended date
+filter is **half-open** - inclusive on the start, exclusive on the end:
 
 ```sql
 WHERE order_date >= RangeStart
   AND order_date <  RangeEnd
 ```
 
-This avoids double-counting rows that fall exactly on a boundary.
+If both ends were inclusive (`<=`), a row dated exactly at a partition
+boundary (e.g. midnight on the 1st of the month) would be refreshed by *two*
+adjacent partitions and double-counted in any cross-partition aggregation.
+Half-open intervals tile the timeline with no overlap and no gap.
 """),
-        code_cell('''spark.sql(f"""
+        code_cell('''# Simulates what Power BI sends for one refresh partition: RangeStart = 2025-01-01, RangeEnd = 2025-04-01
+spark.sql(f"""
 SELECT
   COUNT(*) AS rows_in_window,
   MIN(order_date) AS min_date,
@@ -2286,6 +2385,19 @@ FROM {GOLD}.v_fact_sales_incremental
 WHERE order_date >= DATE '2025-01-01'
   AND order_date <  DATE '2025-04-01'
 """).show()'''),
+        code_cell('''# Boundary check: a row dated exactly on RangeEnd must NOT appear in this window (half-open contract)
+spark.sql(f"""
+SELECT COUNT(*) AS rows_exactly_on_range_end
+FROM {GOLD}.v_fact_sales_incremental
+WHERE order_date = DATE '2025-04-01'
+""").show()'''),
+        md_cell("""### Reading the query plan for the partition filter
+
+Before trusting an incremental refresh policy in production, confirm the
+date predicate is actually usable by the engine - run `EXPLAIN FORMATTED` on
+the same filter Power BI will send and check the `PushedFilters` /
+`Pruned` lines for `order_date`.
+"""),
         code_cell('''spark.sql(f"""
 EXPLAIN FORMATTED
 SELECT order_date, category, customer_region, line_revenue
@@ -2293,16 +2405,45 @@ FROM {GOLD}.v_fact_sales_incremental
 WHERE order_date >= DATE '2025-01-01'
   AND order_date <  DATE '2025-04-01'
 """).show(80, truncate=False)'''),
-        md_cell("""## BI contract
+        md_cell("""## 5. BI contract in practice
 
-Use `docs/templates/bi-contract.md`.
+Template: `docs/templates/bi-contract.md`. Fill it in for *this* course's
+tables before connecting anything in Power BI - the contract is the
+hand-off artifact between the Databricks builder and the report author.
 
-Minimum decisions:
+**Worked example for RetailHub:**
+
+| Source object | Grain | Mode | Refresh | Owner |
+|---|---|---|---|---|
+| `gold.fact_sales_dashboard_monthly` | month x region x category x channel | Import | daily, scheduled after Gold job | Data team |
+| `gold.v_fact_sales_incremental` | one row per order line (24 month window) | Import incremental, or DirectQuery for a live page | incremental: daily; live: every query | Data team |
+| `gold.dim_date` | one row per calendar date | Import | rarely changes, refresh weekly | Data team |
+| `gold.dim_product` | one row per product | Import | daily, with Gold job | Data team |
+| `gold.dim_customer` | one row per customer | Import | daily, with Gold job | Data team |
+
+Minimum decisions to record:
 
 - Source for summary page: `gold.fact_sales_dashboard_monthly`.
 - Source for detail/drill-through: `gold.v_fact_sales_incremental`.
 - Baseline mode: Import.
-- Live/DirectQuery only when freshness is more important than cost stability.
+- Live/DirectQuery only when freshness is more important than cost stability
+  (see the decision table in section 1).
+"""),
+        md_cell("""### Is the dataset ready? Checklist
+
+Before handing the contract to a report author, confirm:
+
+- [ ] every table in the contract exists and `spark.catalog.tableExists(...)`
+      returns `True`,
+- [ ] the date column used for incremental refresh is a real `DATE`/`TIMESTAMP`,
+      never null, and matches business reporting periods,
+- [ ] summary and detail sources reconcile (see Module 2's reconciliation
+      check) - a report built on both must not show conflicting totals,
+- [ ] column names are final - renaming a Gold column after Power BI tables
+      are built breaks every downstream measure,
+- [ ] at least one full Import refresh has been timed, so refresh duration is
+      known before scheduling,
+- [ ] the contract names an owner for "what happens when this breaks".
 """),
         code_cell('''spark.sql(f"""
 SELECT
@@ -2343,15 +2484,26 @@ Return Rate = DIVIDE(SUM(fact_sales_dashboard_monthly[returned_orders]), SUM(fac
 Everything else should be pushed into Databricks Gold unless there is a clear
 reporting reason not to.
 """),
-        md_cell("""## Report layout walkthrough
+        md_cell("""## 6. Mock report walkthrough - widget by widget
 
-Use `assets/images/powerbi_report_mockup.png` as the target report sketch:
+![Power BI mockup](../assets/images/powerbi_report_mockup.png)
 
-- KPI cards at the top,
-- revenue/margin trend as primary visual,
-- region/category slices,
-- filters that map to Gold columns,
-- no hidden complex transformations in Power Query.
+Walk through this report sketch one widget at a time. This is the mapping to
+use whether the room has live Power BI or only the screenshot.
+
+| Widget | What it shows | Powering table | Aggregate or detail? |
+|---|---|---|---|
+| 5 KPI cards (Revenue, Gross margin, Orders, Return rate, DQ score) | single current-period numbers | `gold.fact_sales_dashboard_monthly` | aggregate - cards never need line-grain rows |
+| Revenue and margin trend (line chart) | trend across months | `gold.fact_sales_dashboard_monthly` | aggregate - one point per `year_month` |
+| Revenue by region (bar chart) | revenue sliced by `customer_region` | `gold.fact_sales_dashboard_monthly` | aggregate - region is already a grouping column |
+| Filters panel (Date / Region / Channel / Category) | slicers that filter every visual on the page | `gold.dim_date`, `gold.dim_customer`, `gold.dim_product` | dimension tables - slicers should list values, not scan facts |
+| (drill-through page, not shown in mockup) | order-line detail behind any KPI card | `gold.v_fact_sales_incremental` | detail - the only place line-grain rows belong |
+
+**Rule of thumb applied here:** any visual that renders one mark per
+month/region/category should read from an aggregate table. Only a
+drill-through or "show me the rows" page should ever touch the detail view.
+This keeps the report fast and keeps DirectQuery (if used on the
+drill-through page) limited to a narrow, already-filtered slice.
 """),
         md_cell("""## Discussion: choose the mode
 
@@ -2361,6 +2513,22 @@ Use `assets/images/powerbi_report_mockup.png` as the target report sketch:
 | How many users click the report? | many readers | controlled audience |
 | Where is cost paid? | scheduled refresh | every interaction |
 | What Gold object is required? | curated table/view | aggregate or very selective view |
+"""),
+        md_cell("""## Module 3 wrap-up
+
+By the end of this module each participant has:
+
+- a decision table and a worked cost argument for Import vs DirectQuery,
+- a real (or mock-narrated) connection walkthrough from SQL Warehouse to
+  Power BI, including where hostname and HTTP path come from,
+- `gold.v_fact_sales_incremental` built with a correct half-open date filter,
+  ready for Power BI's `RangeStart`/`RangeEnd` parameters,
+- a filled-in BI contract for RetailHub's Gold tables and a readiness
+  checklist,
+- a widget-by-widget map of the mock report to its powering table.
+
+Workshop 2 reuses `gold.fact_sales_dashboard_monthly` and
+`gold.v_fact_sales_incremental` directly - both must exist before starting it.
 """),
     ]
     write_notebook(ROOT / "notebooks/m3_powerbi_semantic_dataset.ipynb", cells)

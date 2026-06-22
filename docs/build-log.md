@@ -356,3 +356,90 @@ Uwaga: cell-count exercise (19) jest nieznacznie powyzej dolnego targetu
 markdown (zadanie + rubric) i code cell, a tresc jest genuinely nowa
 (nowe KPI, nowa tabela, nowy reconciliation pair), nie relabeling
 istniejacych 2-3 zadan.
+
+## Medi Block 4 — Module 3 expansion
+
+Zakres: `docs/06-notebook-review-and-expansion-tasks.md` M3-01..M3-05,
+funkcja `notebook_module_3()` w `scripts/build_materials_v1.py`.
+
+**M3-01 — Import vs DirectQuery.** Stara jednolinijkowa sekcja zastapiona
+tabela decyzyjna (6 wymiarow: freshness, warehouse load, responsiveness,
+cost driver, zrodlo) + osobna sekcja "query fan-out" tlumaczaca dlaczego
+koszt DirectQuery skaluje sie jako `visuals x filter changes x concurrent
+users`, nie liniowo z wolumenem danych, plus jawna lista "kiedy live ma
+sens". Obraz `import_vs_directquery.png` byl juz uzywany — embed
+zachowany, rozbudowana tresc wokol niego.
+
+**M3-02 — Connection walkthrough.** Dodano numerowany 8-krokowy
+walkthrough z dokladnym wskazaniem skad pochodzi server hostname / HTTP
+path (SQL Warehouse -> Connection details), z realnym przykladowym
+formatem (`dbc-xxxxxxxx-xxxx.cloud.databricks.com`,
+`/sql/1.0/warehouses/...`). Dodano nowa sekcje "Variant: no Power BI
+Desktop available" realizujaca mitigację Risk 3 z
+`docs/04-pre-implementation-analysis.md` — trainer-demo vs
+mock-narrated-walkthrough oparty na istniejacych screenshotach
+(`source_powerbi_directquery_connector.webp`,
+`powerbi_connection_walkthrough.png`), z odeslaniem do SQL-owych komorek
+w tym samym notebooku jako "real data without Power BI UI".
+
+**M3-03 — Incremental refresh.** Dodano jawna sekcje "requirements dla
+kolumny daty" (musi byc DATE/TIMESTAMP, not null, biznesowo sensowna,
+pushdown-friendly) przed CREATE VIEW. Po istniejacym
+`v_fact_sales_incremental` dodano: wyjasnienie half-open interval z
+przykladem podwojnego liczenia, NOWA komorka boundary-check (`order_date
+= RangeEnd` musi zwrocic 0 wierszy), oraz osobna markdown+code para na
+czytanie `EXPLAIN FORMATTED` pod katem `PushedFilters`/`Pruned`. Obraz
+`incremental_refresh_range.png` byl juz uzywany — embed zachowany.
+
+**M3-04 — BI contract w praktyce.** Nowa sekcja "BI contract in
+practice" z worked example tabela (source object | grain | mode |
+refresh | owner) wypelniona dla wszystkich 5 obiektow tego kursu
+(`fact_sales_dashboard_monthly`, `v_fact_sales_incremental`, `dim_date`,
+`dim_product`, `dim_customer`), zgodna ze struktura
+`docs/templates/bi-contract.md`. Osobna komorka "Is the dataset ready?
+Checklist" z 6 konkretnymi punktami (tableExists, typ kolumny daty,
+rekoncyliacja, finalnosc nazw kolumn, zmierzony czas refresh, named
+owner).
+
+**M3-05 — Mock report walkthrough.** Nowa sekcja widget-by-widget nad
+`powerbi_report_mockup.png`: tabela mapujaca kazdy widget (5x KPI cards,
+trend line, revenue-by-region bars, filters panel, drill-through page) na
+konkretna tabele zrodlowa i etykiete aggregate/detail, z regula "jeden
+mark per month/region -> aggregate, drill-through -> detail".
+
+**Pre-check.** Inline `missing = [...]` zastapiony `precheck_cell(...)`
+(reuse helpera, trzeci przypadek poza generatorem po module 2 i
+workshop 1).
+
+### Weryfikacja
+
+```
+.venv/bin/python scripts/build_materials_v1.py
+# -> "Built Databricks-Data-Analyst-Medi v1 materials" (bez bledow)
+
+nbformat.read(as_version=4) + nbformat.validate(): PASS
+m3_powerbi_semantic_dataset.ipynb: 17 -> 24 cells (7 code, 17 markdown),
+compile_errors=0 [OK]
+
+Walidacja WSZYSTKICH notebookow w repo (nbformat + compile): 11/11 PASS
+(data/generate_training_dataset.ipynb 24, m1 20, m2 36, m3 24 (nowy), m4 15,
+setup x2 (4, 3), w1 exercise/solution 19/22, w2 exercise/solution 14/17)
+```
+
+Grep proof: `precheck_cell` uzyty w `notebook_module_3` (linia ~2211),
+`CREATE OR REPLACE VIEW {GOLD}.v_fact_sales_incremental` obecny, `RangeStart`
+5x i `RangeEnd` 6x, tabela BI contract z naglowkiem "Source object | Grain
+| Mode | Refresh | Owner" obecna, wszystkie 5 obrazow zreferencjonowane
+(import_vs_directquery.png, powerbi_report_mockup.png x2,
+powerbi_connection_walkthrough.png x2, incremental_refresh_range.png,
+source_powerbi_directquery_connector.webp x2 — wszystkie byly juz uzyte w
+oryginalnej wersji, rozbudowana tresc wokol nich), sekcja "Variant: no
+Power BI Desktop available" z "Mock walkthrough (no Power BI access for
+anyone)" obecna.
+
+Pelny `git diff --stat` pokazal zmiany w 12 plikach (11 notebookow +
+generator), ale dla 10 z 11 notebookow (wszystkie poza m3) zweryfikowano
+linia-po-linii: jedyne zmiany to `"id"` (cell UUID, losowy per build run) —
+zero zmian tresci, zero regresji.
+
+Hash commitu: patrz `git log -1 --oneline` po commicie tego bloku.
