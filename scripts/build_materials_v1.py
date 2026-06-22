@@ -3096,94 +3096,175 @@ def notebook_workshop_2(solution: bool) -> None:
     cells = [
         md_cell(f"""# Workshop 2 - Power BI dataset readiness ({title})
 
-Goal: prepare the BI-ready dataset and document Import vs DirectQuery decision.
+Goal: decide which Gold objects power the summary page and the drill-through
+page, justify Import vs DirectQuery for this specific report, verify the
+incremental-refresh window yourself, and write the BI contract and cost
+guardrails for this dataset - the same artifacts a real BI handoff needs.
 
 ![Power BI mockup](../assets/images/powerbi_report_mockup.png)
+
+This workshop is split into exactly 6 tasks (W2-02). It reuses
+`gold.fact_sales_dashboard_monthly` from Module 2 and
+`gold.v_fact_sales_incremental` from Module 3 - both must already exist.
 """),
         code_cell("""%run ../setup/00_setup"""),
         md_cell("""## Success criteria
 
 You are done when:
 
-1. Summary page source is identified and row count is known.
-2. Drill-through/detail source is identified and has date boundaries.
-3. Import vs DirectQuery decision is justified.
-4. Incremental refresh predicate uses a half-open date window.
-5. BI contract and cost guardrails are written.
-6. The self-check cell passes.
+1. Summary-page source is chosen and justified (row count, grain known).
+2. Drill-through source is chosen and justified (date boundaries known).
+3. Import vs DirectQuery is decided for THIS dataset, with reasoning - not
+   just copied from Module 3.
+4. You ran your own boundary test against `gold.v_fact_sales_incremental`
+   and it returns only the requested half-open window.
+5. The BI contract (`docs/templates/bi-contract.md` shape) is filled for
+   this workshop's choices.
+6. The cost guardrails checklist (`docs/templates/cost-awareness-checklist.md`
+   shape) is filled for this report.
 """),
         md_cell("""## Runtime pre-check
 
-Run Modules 2 and 3 before this workshop.
+Requires Module 2 (`gold.fact_sales_dashboard_monthly`) AND Module 3
+(`gold.v_fact_sales_incremental`). If either is missing, the cell below
+names exactly which module to run.
 """),
-        code_cell("""required_objects = [
-    f"{GOLD}.fact_sales_dashboard_monthly",
-    f"{GOLD}.v_fact_sales_incremental",
-]
-
-missing = [table for table in required_objects if not spark.catalog.tableExists(table)]
-if missing:
-    raise Exception("Missing objects. Run Modules 2 and 3 first: " + ", ".join(missing))
-
-print("[OK] Workshop inputs exist")"""),
+        precheck_cell(
+            [
+                "{GOLD}.fact_sales_dashboard_monthly",
+                "{GOLD}.v_fact_sales_incremental",
+            ],
+            "notebooks/m2_gold_dashboard.ipynb (for fact_sales_dashboard_monthly) "
+            "and notebooks/m3_powerbi_semantic_dataset.ipynb (for v_fact_sales_incremental)",
+        ),
         md_cell("""## Tasks
 
-1. Check if monthly aggregate is enough for the summary page.
-2. Check if incremental view has date boundaries.
-3. Document BI contract.
-4. Decide Import vs live/DirectQuery.
-5. List cost guardrails.
-6. Validate the expected refresh window predicate.
+1. Wybierz source dla summary page.
+2. Wybierz source dla drill-through.
+3. Zdefiniuj Import vs DirectQuery dla tego datasetu.
+4. Zweryfikuj incremental refresh (twoj wlasny boundary test).
+5. Wypelnij BI contract.
+6. Wypelnij cost guardrails.
 """),
     ]
     if solution:
         cells.extend([
-            md_cell("""## Task 1 - summary aggregate"""),
-            code_cell('''spark.sql(f"""
+            md_cell("""## Task 1 - wybierz source dla summary page
+
+The executive summary page needs month-level KPI cards and a trend line -
+both are aggregate questions, so the monthly Gold table is enough and is
+far cheaper to scan than line-grain detail.
+"""),
+            code_cell('''summary_profile = spark.sql(f"""
 SELECT
   MIN(year_month) AS min_month,
   MAX(year_month) AS max_month,
   COUNT(*) AS aggregate_rows,
   SUM(revenue) AS revenue
 FROM {GOLD}.fact_sales_dashboard_monthly
-""").show()'''),
-            md_cell("""## Task 2 - detail/incremental source"""),
-            code_cell('''spark.sql(f"""
+""")
+summary_profile.show()
+
+print("Decision: summary page source = gold.fact_sales_dashboard_monthly")
+print("Reason: KPI cards and trend lines are month-grain questions; the")
+print("monthly aggregate answers them without scanning line-grain rows.")'''),
+            md_cell("""## Task 2 - wybierz source dla drill-through
+
+The drill-through page must show individual order lines behind any KPI
+card, so it needs line grain with real date boundaries - that is exactly
+what `v_fact_sales_incremental` provides (24-month rolling window).
+"""),
+            code_cell('''detail_profile = spark.sql(f"""
 SELECT
   MIN(order_date) AS min_date,
   MAX(order_date) AS max_date,
   COUNT(*) AS detail_rows
 FROM {GOLD}.v_fact_sales_incremental
-""").show()'''),
-            md_cell("""## Task 3 - simulate incremental-refresh window"""),
-            code_cell('''spark.sql(f"""
+""")
+detail_profile.show()
+
+print("Decision: drill-through source = gold.v_fact_sales_incremental")
+print("Reason: drill-through needs order-line grain; this view is the only")
+print("Gold object built at that grain with a bounded, indexable date range.")'''),
+            md_cell("""## Task 3 - zdefiniuj Import vs DirectQuery (ten dataset)
+
+Apply Module 3's decision table to this report specifically:
+
+| Question | Answer for this report |
+|---|---|
+| Does any visual need sub-hour freshness? | No - sales close end-of-day, daily Gold refresh is enough |
+| Is data volume small enough for Import? | Yes - monthly aggregate is a few thousand rows, incremental view is a bounded 24-month window |
+| Are there concurrent users hitting the same visuals? | Yes (workshop/demo audience) - DirectQuery cost scales with `visuals x filter changes x users`, Import does not |
+| Is there a genuine operational/live use case? | Only a small "today's orders" operational page, if one is added later |
+
+**Decision for this dataset: Import is the baseline for both the summary
+page and the drill-through page.** DirectQuery is reserved as the
+exception, only if a future operational page needs intra-day freshness -
+and even then it must point at a Gold aggregate, never at Silver detail.
+"""),
+            md_cell("""## Task 4 - zweryfikuj incremental refresh (twoj test)
+
+Run a boundary test against `gold.v_fact_sales_incremental` using a
+different window than Module 3's example, to prove the half-open contract
+holds in general, not just for one hard-coded range.
+"""),
+            code_cell('''range_start = "2025-04-01"
+range_end = "2025-07-01"
+
+window_check = spark.sql(f"""
 SELECT
   COUNT(*) AS rows_in_window,
   MIN(order_date) AS min_date,
   MAX(order_date) AS max_date
 FROM {GOLD}.v_fact_sales_incremental
-WHERE order_date >= DATE '2025-01-01'
-  AND order_date <  DATE '2025-04-01'
-""").show()'''),
-            md_cell("""## Task 4 - BI contract"""),
-            md_cell("""Suggested BI contract:
+WHERE order_date >= DATE '{range_start}'
+  AND order_date <  DATE '{range_end}'
+""").first()
+
+print(window_check)
+assert str(window_check["min_date"]) >= range_start, "Window starts before RangeStart"
+assert str(window_check["max_date"]) < range_end, "Window includes the RangeEnd boundary"
+
+boundary_row = spark.sql(f"""
+SELECT COUNT(*) AS rows_on_range_end
+FROM {GOLD}.v_fact_sales_incremental
+WHERE order_date = DATE '{range_end}'
+""").first()
+print("Rows exactly on RangeEnd (must be excluded from the window above):", boundary_row["rows_on_range_end"])
+
+print("[OK] half-open RangeStart/RangeEnd predicate verified for a second window")'''),
+            md_cell("""## Task 5 - wypelnij BI contract
+
+Filled `docs/templates/bi-contract.md` for this workshop's dataset:
 
 | Area | Decision |
 |---|---|
 | Summary source | `gold.fact_sales_dashboard_monthly` |
-| Detail source | `gold.v_fact_sales_incremental` |
+| Detail/drill-through source | `gold.v_fact_sales_incremental` |
+| Grain (summary) | one row per `year_month` x region x category x channel |
+| Grain (detail) | one row per order line, 24-month rolling window |
 | Baseline mode | Import |
-| Live option | DirectQuery only for a small operational page on Gold aggregate |
-| Refresh | incremental by `order_date`, half-open window |
-| Cost guardrail | no visual can query Silver detail |
-| Owner | Sales Ops for KPI, BI team for report |
+| Live option | DirectQuery only for a future small operational page on a Gold aggregate, never on Silver |
+| Refresh pattern | incremental by `order_date`, half-open `RangeStart`/`RangeEnd` window |
+| Cost guardrail | no visual may query Silver detail directly |
+| Refresh owner | Data team |
+| Business owner | Sales Ops |
+| Technical owner | BI team |
 """),
-            md_cell("""## Suggested decision
+            md_cell("""## Task 6 - wypelnij cost guardrails
 
-Use Import for the executive dashboard baseline. Use DirectQuery/live only for a
-small operational page that reads Gold aggregates, not Silver detail.
+Filled `docs/templates/cost-awareness-checklist.md` for this report:
+
+| Area | Question | Decision |
+|---|---|---|
+| Warehouse size | What size is enough for the demo/report? | Small/X-Small Serverless SQL Warehouse - aggregate-grain queries, low concurrency in a workshop setting |
+| Auto-stop | How long should idle compute stay warm? | Auto-stop at 5-10 minutes; refresh runs are short and infrequent |
+| Import mode | Can refresh be scheduled instead of live queries? | Yes - daily scheduled Import refresh after the Gold job completes |
+| DirectQuery | Which visuals can trigger expensive SQL? | None today; if added later, restrict to a single operational page on a Gold aggregate |
+| Aggregates | Which Gold aggregates reduce scan size? | `gold.fact_sales_dashboard_monthly` for every summary visual; `v_fact_sales_incremental` only behind drill-through |
+| Monitoring | Where do we inspect query and billing usage? | SQL warehouse monitoring UI + system billing tables, reviewed weekly |
 """),
-            md_cell("""## Task 5 - self-check"""),
+            md_cell("""## Self-check"""),
             code_cell('''assert spark.catalog.tableExists(f"{GOLD}.fact_sales_dashboard_monthly"), "Missing monthly aggregate"
 assert spark.catalog.tableExists(f"{GOLD}.v_fact_sales_incremental"), "Missing incremental view"
 
@@ -3193,55 +3274,110 @@ assert summary_rows > 0, "Summary aggregate is empty"
 assert detail_rows > 0, "Incremental view is empty"
 
 window = spark.sql(f"""
-SELECT
-  MIN(order_date) AS min_date,
-  MAX(order_date) AS max_date
+SELECT MIN(order_date) AS min_date, MAX(order_date) AS max_date
 FROM {GOLD}.v_fact_sales_incremental
-WHERE order_date >= DATE '2025-01-01'
-  AND order_date <  DATE '2025-04-01'
+WHERE order_date >= DATE '2025-04-01'
+  AND order_date <  DATE '2025-07-01'
 """).first()
-assert str(window["min_date"]) >= "2025-01-01", "Window starts too early"
-assert str(window["max_date"]) < "2025-04-01", "Window includes RangeEnd boundary"
+assert str(window["min_date"]) >= "2025-04-01", "Window starts too early"
+assert str(window["max_date"]) < "2025-07-01", "Window includes RangeEnd boundary"
 
-print("[OK] Workshop 2 self-check passed")'''),
+print("[OK] Workshop 2 self-check passed: Import baseline, DirectQuery exception only,")
+print("[OK] BI contract and cost guardrails filled, incremental window verified")'''),
         ])
     else:
         cells.extend([
-            md_cell("""## Task 1 - inspect summary aggregate
+            md_cell("""## Task 1 - wybierz source dla summary page
 
-Expected output: month range, row count and total revenue.
+Inspect the monthly aggregate. Expected output: month range, row count and
+total revenue.
 """),
-            code_cell("""# TODO: inspect summary aggregate.
-spark.sql(f"SELECT * FROM {GOLD}.fact_sales_dashboard_monthly LIMIT 20").show()"""),
-            md_cell("""## Task 2 - inspect incremental view
+            code_cell("""# TODO: inspect the monthly aggregate and note month range, row count, revenue.
+spark.sql(f"SELECT * FROM {GOLD}.fact_sales_dashboard_monthly LIMIT 20").show()
 
-Expected output: date range and detail row count.
-"""),
-            code_cell("""# TODO: inspect incremental view.
-spark.sql(f"SELECT MIN(order_date), MAX(order_date), COUNT(*) FROM {GOLD}.v_fact_sales_incremental").show()"""),
-            md_cell("""## Task 3 - simulate Power BI incremental refresh
+# TODO: write your decision below.
+# Decision: summary page source = ?
+# Reason: ?"""),
+            md_cell("""## Task 2 - wybierz source dla drill-through
 
-Expected output: rows only between `2025-01-01` and before `2025-04-01`.
+Inspect the incremental view. Expected output: date range and detail row
+count.
 """),
-            code_cell('''# TODO: apply the half-open RangeStart / RangeEnd predicate.
+            code_cell("""# TODO: inspect the incremental view and note its date range and row count.
+spark.sql(f"SELECT MIN(order_date), MAX(order_date), COUNT(*) FROM {GOLD}.v_fact_sales_incremental").show()
+
+# TODO: write your decision below.
+# Decision: drill-through source = ?
+# Reason: ?"""),
+            md_cell("""## Task 3 - zdefiniuj Import vs DirectQuery (ten dataset)
+
+Apply Module 3's decision framework to THIS report - not a generic answer.
+Fill in the table for your two chosen sources.
+
+| Question | Your answer for this report |
+|---|---|
+| Does any visual need sub-hour freshness? | |
+| Is data volume small enough for Import? | |
+| Are there concurrent users hitting the same visuals? | |
+| Is there a genuine operational/live use case? | |
+
+# TODO: write your Import vs DirectQuery decision and reasoning here.
+"""),
+            md_cell("""## Task 4 - zweryfikuj incremental refresh
+
+Pick a different `RangeStart`/`RangeEnd` window than Module 3's example and
+prove the half-open contract holds (no row exactly on `RangeEnd`).
+
+Expected output: rows only between your chosen `RangeStart` and before
+`RangeEnd`, and zero rows reported as exactly on `RangeEnd`.
+"""),
+            code_cell('''# TODO: pick your own range_start / range_end (different from Module 3's example).
+range_start = "2025-04-01"
+range_end = "2025-07-01"
+
+# TODO: apply the half-open RangeStart / RangeEnd predicate.
 spark.sql(f"""
 SELECT COUNT(*) AS rows_in_window
 FROM {GOLD}.v_fact_sales_incremental
-WHERE order_date >= DATE '2025-01-01'
-  -- add RangeEnd predicate
-""").show()'''),
-            md_cell("""## Task 4 - mode decision
+WHERE order_date >= DATE '{range_start}'
+  -- TODO: add the RangeEnd predicate (must be < not <=)
+""").show()
 
-Fill this in:
+# TODO: add a second query that counts rows exactly on range_end and assert it is 0.'''),
+            md_cell("""## Task 5 - wypelnij BI contract
 
-| Decision | Your answer |
+Fill the `docs/templates/bi-contract.md` shape for this workshop's dataset.
+
+| Area | Decision |
 |---|---|
+| Summary source | |
+| Detail/drill-through source | |
+| Grain (summary) | |
+| Grain (detail) | |
 | Baseline mode | |
-| Live/DirectQuery justified? | |
-| Which table/view for summary page? | |
-| Which table/view for detail page? | |
-| Main cost risk | |
-| Mitigation | |
+| Live option | |
+| Refresh pattern | |
+| Cost guardrail | |
+| Refresh owner | |
+| Business owner | |
+| Technical owner | |
+
+<!-- TODO: fill every row of the BI contract table above. -->
+"""),
+            md_cell("""## Task 6 - wypelnij cost guardrails
+
+Fill the `docs/templates/cost-awareness-checklist.md` shape for this report.
+
+| Area | Question | Decision |
+|---|---|---|
+| Warehouse size | What size is enough for the demo/report? | |
+| Auto-stop | How long should idle compute stay warm? | |
+| Import mode | Can refresh be scheduled instead of live queries? | |
+| DirectQuery | Which visuals can trigger expensive SQL? | |
+| Aggregates | Which Gold aggregates reduce scan size? | |
+| Monitoring | Where do we inspect query and billing usage? | |
+
+<!-- TODO: fill every row of the cost guardrails table above. -->
 """),
             md_cell("""## Bonus
 

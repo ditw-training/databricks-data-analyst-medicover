@@ -443,3 +443,88 @@ linia-po-linii: jedyne zmiany to `"id"` (cell UUID, losowy per build run) —
 zero zmian tresci, zero regresji.
 
 Hash commitu: patrz `git log -1 --oneline` po commicie tego bloku.
+
+## Medi Block 5 — Workshop 2 expansion
+
+Zakres: `docs/06-notebook-review-and-expansion-tasks.md` zadania W2-01..03
+(Workshop 2 — Power BI dataset readiness). Edytowana wylacznie funkcja
+`notebook_workshop_2(solution: bool)` w `scripts/build_materials_v1.py`
+(linia ~3094), oba notebooki (`w2_powerbi_dataset_exercise.ipynb` i
+`_solution.ipynb`) zbudowane z tej jednej funkcji.
+
+**W2-01 — Pre-check.** Inline `required_objects = [...]` zastapiony
+`precheck_cell([...], prereq_notebook)` (reuse helpera). Komunikat o braku
+obiektow jednoznacznie wskazuje ktory modul uruchomic:
+`notebooks/m2_gold_dashboard.ipynb` dla `fact_sales_dashboard_monthly` i
+`notebooks/m3_powerbi_semantic_dataset.ipynb` dla
+`v_fact_sales_incremental`.
+
+**W2-02 — Rozbicie na 6 jawnych zadan.** Workshop przebudowany z plaskiej
+listy 5 kroków na 6 numerowanych sekcji `## Task N - ...`, kazda z wlasnym
+markdown + code cell:
+1. Wybierz source dla summary page (`fact_sales_dashboard_monthly`,
+   uzasadnienie: KPI cards/trend = pytania miesieczne).
+2. Wybierz source dla drill-through (`v_fact_sales_incremental`,
+   uzasadnienie: order-line grain z ograniczonym oknem dat).
+3. Zdefiniuj Import vs DirectQuery dla TEGO datasetu — tabela pytan
+   (freshness, wolumen, wspolbiezni uzytkownicy, realny live use case)
+   zaaplikowana do konkretnych dwoch zrodel, nie ogolna odpowiedz z
+   modulu 3.
+4. Zweryfikuj incremental refresh — uczestnik pisze WLASNY boundary test
+   (inne okno niz przyklad z modulu 3: `2025-04-01`/`2025-07-01`),
+   sprawdza half-open kontrakt i liczy wiersze dokladnie na `RangeEnd`
+   (musi byc 0).
+5. Wypelnij BI contract — pelna tabela wg struktury
+   `docs/templates/bi-contract.md` (source, grain, mode, refresh, 3
+   ownerow) dla wlasnych wyborow z zadan 1-2.
+6. Wypelnij cost guardrails — pelna tabela wg struktury
+   `docs/templates/cost-awareness-checklist.md` (warehouse size,
+   auto-stop, Import/DirectQuery, aggregates, monitoring) dla TEGO
+   raportu.
+
+**W2-03 — Solution z pelnym BI contract.** Worked example wszystkich 6
+zadan z realnymi wartosciami i jawnym uzasadnieniem "Import jako
+baseline, DirectQuery jako wyjatek" (cytat z solution: "Import is the
+baseline for both the summary page and the drill-through page... 
+DirectQuery is reserved as the exception, only if a future operational
+page needs intra-day freshness"), spojnym z `docs/04-pre-implementation-analysis.md`
+Ryzyko 3 ("DirectQuery/live moze byc demo prowadzacego lub mock demo.
+Import jest baseline dla uczestnikow").
+
+Cell count: exercise 14 -> 16, solution 17 -> 17 (target 12-16 / 14-18 —
+exercise w gornej granicy, solution restrukturyzowane do 6 zadan przy tej
+samej liczbie komorek dzieki polaczeniu markdown-only sekcji z code
+cellami per zadanie).
+
+### Weryfikacja
+
+```
+.venv/bin/python scripts/build_materials_v1.py
+# -> "Built Databricks-Data-Analyst-Medi v1 materials" (bez bledow)
+
+nbformat.read(as_version=4) + nbformat.validate(): PASS dla obu notebookow
+w2_powerbi_dataset_exercise.ipynb: 14 -> 16 cells, 5 code cells, compile
+  errors = 0 [OK]
+w2_powerbi_dataset_solution.ipynb: 17 -> 17 cells, 6 code cells, compile
+  errors = 0 [OK]
+```
+
+Grep proof: `precheck_cell`/`required_tables` obecny w obu notebookach (3x
+wystapien kazdy, marker tekstu wygenerowanego przez helper);
+`fact_sales_dashboard_monthly` (exercise 6x, solution 11x) i
+`v_fact_sales_incremental` (exercise 8x, solution 17x) obecne w obu;
+exercise zawiera 11 markerow `TODO` rozlozonych po wszystkich 6 zadaniach;
+solution zawiera 0 markerow `TODO`; oba notebooki maja te same 6 naglowkow
+`Task 1..6` (Task 4 w solution ma dodatkowy dopisek "(twoj test)", ta sama
+tresc zadania); oba zawieraja sekcje "BI contract"/"bi-contract" (6x kazdy)
+i "cost guardrails"/"cost-awareness-checklist" (5x kazdy); solution
+zawiera jawny string "Import is the baseline for both the summary" i
+"DirectQuery is reserved as the [exception]".
+
+Pelny `git diff --stat` pokazal zmiany w 12 plikach (11 notebookow +
+generator). Dla 9 z 11 notebookow (wszystkie poza oboma w2_*)
+zweryfikowano linia-po-linii z `git diff -- <plik> | grep -v '"id":'`:
+jedyne zmiany to `"id"` (cell UUID, losowy per build run) — zero zmian
+tresci, zero regresji.
+
+Hash commitu: patrz `git log -1 --oneline` po commicie tego bloku.
