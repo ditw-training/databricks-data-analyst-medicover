@@ -1664,25 +1664,59 @@ def notebook_module_2() -> None:
 
 The Gold layer is the contract between data engineering, analytics and BI.
 This module builds the RetailHub Gold model and makes KPI definitions explicit.
+This is the spine of the course: everything in Workshop 1, Module 3 and
+Workshop 2 depends on objects created here.
 """),
         code_cell("""%run ../setup/00_setup"""),
-        md_cell("""## Runtime pre-check
+        md_cell("""## GLOBAL-01: runtime pre-check
 
-Run `data/generate_training_dataset.ipynb` before this notebook.
+Reuses the standardized `precheck_cell` helper from
+`scripts/build_materials_v1.py` (first used in
+`data/generate_training_dataset.ipynb`). It checks that the Gold starter
+objects from the generator already exist, and stops with a clear message if
+they do not, instead of failing later with a confusing `TABLE_OR_VIEW_NOT_FOUND`.
 """),
-        code_cell("""required_tables = [
-    f"{GOLD}.fact_sales",
-    f"{GOLD}.dim_customer",
-    f"{GOLD}.dim_product",
-    f"{GOLD}.dim_date",
-]
+        precheck_cell(
+            [
+                "{GOLD}.dim_date",
+                "{GOLD}.dim_product",
+                "{GOLD}.dim_customer",
+                "{GOLD}.fact_sales",
+            ],
+            "data/generate_training_dataset.ipynb",
+        ),
+        md_cell("""## M2-01: Medallion layers in practice
 
-missing = [table for table in required_tables if not spark.catalog.tableExists(table)]
-if missing:
-    raise Exception("Missing Gold starter tables. Run data/generate_training_dataset first: " + ", ".join(missing))
+Bronze, Silver and Gold are not just "three folders" - they are three
+different contracts with different owners, different quality bars and
+different consumers.
 
-print("[OK] Gold starter model exists")"""),
+| Layer | Ownership | Quality bar | Latency | Typical consumers |
+|---|---|---|---|---|
+| Bronze | Data Engineering | raw, as-landed; no dedup, no schema enforcement beyond ingestion | minutes to hours | Data Engineering only |
+| Silver | Data Engineering | cleaned types, conformed keys, documented known issues; **not** guaranteed business-correct | hourly to daily | Analytics Engineering, advanced analysts |
+| Gold | Analytics Engineering | business-validated, agreed KPI definitions, stable grain, owner assigned | daily (or per refresh contract) | BI tools, dashboards, executives, most analysts |
+
+**What should NOT land in Gold:**
+
+- raw, unvalidated rows with known data-quality issues (orphan keys, nulls
+  in measures, out-of-dictionary statuses) - those stay visible in Silver
+  for investigation, not hidden in Gold,
+- ad-hoc one-off filters that only make sense for a single report,
+- personal calculation logic that has not been agreed with the KPI owner,
+- columns nobody can explain the business meaning of.
+
+**Gold vs. an analyst's ad-hoc working view:** an ad-hoc view answers one
+person's question once, with whatever join and filter felt right that day.
+Gold answers an organization's question repeatedly, with a join and filter
+that have been reviewed, documented (see the data contract in the data
+generator notebook) and will give the same number to Finance, Sales Ops and
+the CEO whenever they ask. If the number cannot survive three people asking
+"why" once, it is not ready for Gold.
+"""),
         md_cell("""## Why Gold exists
+
+![Gold business value](../assets/images/gold_business_value.png)
 
 The business value of Gold is not "another table". It is:
 
@@ -1691,10 +1725,6 @@ The business value of Gold is not "another table". It is:
 - fewer expensive joins in reports,
 - repeatable validation,
 - a place to document ownership and refresh.
-"""),
-        md_cell("""## Business value case
-
-![Gold business value](../assets/images/gold_business_value.png)
 
 RetailHub case:
 
@@ -1716,15 +1746,48 @@ For this course we use both ideas:
 
 - dimensions and facts to explain Kimball discipline,
 - a curated dashboard table/aggregate for Power BI simplicity and cost control.
+
+## M2-02: Kimball step-by-step - grain first
+
+Kimball discipline says: agree the **grain** before you build anything. The
+grain is the answer to "what does one row in this table represent?". Decide
+it wrong and every downstream SUM/COUNT/AVG is silently wrong too.
+
+For RetailHub's dashboard fact table we declare the grain up front:
+
+> **One row = one order line, enriched with customer and product attributes,
+> with a flag for whether the line counts toward completed/returned KPIs.**
+
+This is deliberately the *same* grain as `gold.fact_sales` (one row per
+order line) - we are not changing the grain, we are denormalizing it for BI
+convenience. If the grain were different (e.g. one row per order), every
+KPI definition below would need to change too.
 """),
+        md_cell("""## Recap: the conformed dimensions already exist
+
+`data/generate_training_dataset.ipynb` already built the Kimball-style
+dimensions this module reuses. We do not recreate them - we inspect them as
+the worked example of "build dimensions before the fact".
+"""),
+        code_cell('''spark.sql(f"DESCRIBE TABLE {GOLD}.dim_date").show(truncate=False)
+spark.sql(f"DESCRIBE TABLE {GOLD}.dim_customer").show(truncate=False)
+spark.sql(f"DESCRIBE TABLE {GOLD}.dim_product").show(truncate=False)'''),
+        code_cell('''spark.sql(f"SELECT * FROM {GOLD}.dim_customer LIMIT 5").show(truncate=False)
+spark.sql(f"SELECT * FROM {GOLD}.dim_product LIMIT 5").show(truncate=False)'''),
         md_cell("""## Kimball Gold model
 
 ![Kimball Gold model](../assets/images/kimball_gold_model.png)
-"""),
-        md_cell("""## Inspect the current Gold grain
 
-The fact table should be one row per order line. Before we create BI objects,
-we prove that grain and check whether joins can create fan-out.
+`dim_date`, `dim_customer` and `dim_product` are the conformed dimensions
+above. The fact table in the diagram is the line-grain fact we are about to
+build as `gold.fact_sales_dashboard` - distinct from the generator's
+`gold.fact_sales` (same grain, denormalized for BI consumption: dimension
+attributes are pre-joined so Power BI does not need to repeat the joins on
+every query).
+
+Before we build it, we prove the grain of the source fact table and check
+whether a join can create fan-out (duplicate rows per key, which silently
+inflates SUM/COUNT).
 """),
         code_cell('''spark.sql(f"""
 SELECT
@@ -1741,8 +1804,17 @@ FROM {GOLD}.fact_sales f
 LEFT JOIN {GOLD}.dim_customer c
   ON f.customer_id = c.customer_id
 """).show()'''),
+        md_cell("""## Build `gold.fact_sales_dashboard`
+
+This is Module 2's own artifact: a denormalized, dashboard-ready fact table
+at the grain declared above. It is a NEW object, distinct from the
+generator's `gold.fact_sales` - Workshop 1 and later modules depend on this
+table existing, so it is created here, not just discussed.
+"""),
         code_cell('''spark.sql(f"""
-CREATE OR REPLACE TABLE {GOLD}.fact_sales_dashboard AS
+CREATE OR REPLACE TABLE {GOLD}.fact_sales_dashboard
+COMMENT 'Module 2 Kimball-style dashboard fact: one row per order line (same grain as gold.fact_sales), denormalized with customer and product attributes for direct Power BI consumption.'
+AS
 SELECT
   f.order_date,
   f.order_id,
@@ -1770,7 +1842,9 @@ LEFT JOIN {GOLD}.dim_product p ON f.product_id = p.product_id
 """)
 
 spark.sql(f"""
-CREATE OR REPLACE TABLE {GOLD}.fact_sales_dashboard_monthly AS
+CREATE OR REPLACE TABLE {GOLD}.fact_sales_dashboard_monthly
+COMMENT 'Monthly aggregate over gold.fact_sales_dashboard for summary Power BI visuals. Must reconcile against the detail table - see the reconciliation check below.'
+AS
 SELECT
   date_format(order_date, 'yyyy-MM') AS year_month,
   customer_region,
@@ -1784,7 +1858,7 @@ FROM {GOLD}.fact_sales_dashboard
 GROUP BY date_format(order_date, 'yyyy-MM'), customer_region, category, channel
 """)
 
-print("[OK] Dashboard fact and aggregate created")'''),
+print("[OK] gold.fact_sales_dashboard and gold.fact_sales_dashboard_monthly created")'''),
         md_cell("""## Gold quality gate
 
 ![Gold quality gate](../assets/images/gold_quality_gate.png)
@@ -1792,36 +1866,61 @@ print("[OK] Dashboard fact and aggregate created")'''),
 The checks below are intentionally business-facing. A red result does not
 automatically mean "stop the project"; it means "write a decision".
 """),
-        md_cell("""## KPI dictionary starter
+        md_cell("""## M2-03: KPI dictionary - built in the notebook
 
-The template lives in `docs/templates/kpi-dictionary.md`.
+This recreates `docs/templates/kpi-dictionary.md` as in-notebook work: each
+KPI gets a business definition AND a SQL definition side by side, queried
+directly against `gold.fact_sales_dashboard` so the numbers are not just
+claims.
+
+| KPI | Business definition | SQL definition | Grain | Caveat |
+|---|---|---|---|---|
+| Revenue | Completed order line revenue after discount | `SUM(line_revenue) WHERE is_completed` | order line | excludes returned/cancelled lines |
+| Gross margin | Completed revenue minus completed cost | `SUM(line_margin) WHERE is_completed` | order line | depends on product cost data quality |
+| Return rate | Returned orders / (completed + returned) orders | `COUNT(DISTINCT order_id WHERE is_returned) / COUNT(DISTINCT order_id WHERE is_completed OR is_returned)` | order | must use `COUNT(DISTINCT order_id)`, not line count |
+| Orders | Distinct completed orders | `COUNT(DISTINCT order_id) WHERE is_completed` | order | line-grain `COUNT(*)` over-counts - see distinct-count trap below |
+| DQ score | Weighted count of failed quality checks | `SUM(score_component)` from `gold.data_quality_score` | one row per run | see M2-05 breakdown below for what is and is not included |
 """),
-        md_cell("""## KPI definition flow
-
-![KPI definition flow](../assets/images/kpi_definition_flow.png)
-
-Suggested KPI dictionary rows:
-
-| KPI | Business definition | SQL definition | Caveat |
-|---|---|---|---|
-| Revenue | completed line revenue after discount | `SUM(line_revenue) WHERE is_completed` | excludes returned/cancelled |
-| Gross margin | completed revenue minus cost | `SUM(line_margin) WHERE is_completed` | depends on product cost quality |
-| Return rate | returned orders / eligible orders | returned / (completed + returned) | distinct count grain matters |
-"""),
-        code_cell('''spark.sql(f"""
+        code_cell('''kpi_dictionary = spark.sql(f"""
 SELECT
   SUM(CASE WHEN is_completed THEN line_revenue ELSE 0 END) AS revenue,
   SUM(CASE WHEN is_completed THEN line_margin ELSE 0 END) AS gross_margin,
   COUNT(DISTINCT CASE WHEN is_completed THEN order_id END) AS completed_orders,
-  COUNT(DISTINCT CASE WHEN is_returned THEN order_id END) AS returned_orders
+  COUNT(DISTINCT CASE WHEN is_returned THEN order_id END) AS returned_orders,
+  ROUND(
+    COUNT(DISTINCT CASE WHEN is_returned THEN order_id END) /
+    NULLIF(COUNT(DISTINCT CASE WHEN is_completed OR is_returned THEN order_id END), 0),
+    4
+  ) AS return_rate
 FROM {GOLD}.fact_sales_dashboard
-""").show()'''),
-        md_cell("""## Distinct-count trap
+""")
+kpi_dictionary.show(truncate=False)
+
+# Persist the KPI dictionary numbers as a temp view so the rest of the
+# notebook (and Workshop 1) can query "today's KPI snapshot" by name instead
+# of re-deriving it from scratch.
+kpi_dictionary.createOrReplaceTempView("kpi_dictionary_snapshot")
+print("[OK] kpi_dictionary_snapshot temp view created")'''),
+        md_cell("""## KPI definition flow
+
+![KPI definition flow](../assets/images/kpi_definition_flow.png)
+
+### Distinct-count trap
 
 If the same order can contain products from many categories, summing order
 counts by category can over-count orders. This is a good discussion point for
-Power BI modelling and aggregation design.
+Power BI modelling and aggregation design - and it is exactly the
+`COUNT(DISTINCT)` pitfall referenced in the KPI dictionary above: counting
+orders at line-grain without `DISTINCT` inflates the count.
 """),
+        code_cell('''spark.sql(f"""
+SELECT
+  COUNT(*) AS line_grain_count_no_distinct,
+  COUNT(DISTINCT order_id) AS correct_distinct_order_count,
+  COUNT(*) - COUNT(DISTINCT order_id) AS inflation_from_wrong_grain
+FROM {GOLD}.fact_sales_dashboard
+WHERE is_completed
+""").show()'''),
         code_cell('''spark.sql(f"""
 WITH by_category AS (
   SELECT
@@ -1838,6 +1937,30 @@ SELECT
   (SELECT SUM(completed_orders) FROM by_category) AS sum_of_category_orders,
   (SELECT completed_orders FROM overall) AS true_completed_orders,
   (SELECT SUM(completed_orders) FROM by_category) - (SELECT completed_orders FROM overall) AS overcount
+""").show()'''),
+        md_cell("""## M2-04: Reconciliation - `fact_sales` vs `fact_sales_dashboard`
+
+Two Gold objects exist at the same grain (one row per order line):
+`gold.fact_sales` (the generator's grain) and `gold.fact_sales_dashboard`
+(this module's denormalized grain). They must reconcile - if they do not,
+either the join logic or the grain assumption is wrong.
+"""),
+        code_cell('''spark.sql(f"""
+WITH base AS (
+  SELECT
+    ROUND(SUM(CASE WHEN status = 'Completed' THEN line_revenue ELSE 0 END), 2) AS revenue
+  FROM {GOLD}.fact_sales
+),
+dashboard AS (
+  SELECT
+    ROUND(SUM(CASE WHEN is_completed THEN line_revenue ELSE 0 END), 2) AS revenue
+  FROM {GOLD}.fact_sales_dashboard
+)
+SELECT
+  base.revenue AS fact_sales_revenue,
+  dashboard.revenue AS fact_sales_dashboard_revenue,
+  base.revenue - dashboard.revenue AS diff
+FROM base CROSS JOIN dashboard
 """).show()'''),
         md_cell("""## Reconciliation: detail vs aggregate
 
@@ -1866,51 +1989,135 @@ SELECT
   detail.gross_margin - agg.gross_margin AS margin_diff
 FROM detail CROSS JOIN agg
 """).show()'''),
-        md_cell("""## Data quality score"""),
-        code_cell('''quality = spark.sql(f"""
-WITH checks AS (
-  SELECT 'missing_price' AS check_name, COUNT(*) AS issue_count FROM {GOLD}.fact_sales_dashboard WHERE unit_price IS NULL
-  UNION ALL
-  SELECT 'invalid_status', COUNT(*) FROM {GOLD}.fact_sales_dashboard WHERE status NOT IN ('Completed','Cancelled','Returned')
-  UNION ALL
-  SELECT 'future_order_date', COUNT(*) FROM {GOLD}.fact_sales_dashboard WHERE order_date > current_date()
-  UNION ALL
-  SELECT 'missing_customer', COUNT(*) FROM {GOLD}.fact_sales_dashboard WHERE segment IS NULL
-  UNION ALL
-  SELECT 'missing_product', COUNT(*) FROM {GOLD}.fact_sales_dashboard WHERE category IS NULL
+        md_cell("""## Reconciliation breaks: a deliberately bad join (fan-out)
+
+This is the negative example: joining `fact_sales_dashboard` back to
+`dim_product` on `category` instead of `product_id` creates a many-to-many
+fan-out (many products share a category), duplicating rows and inflating
+revenue. This is what "the bad join breaking the match" looks like in
+practice - compare this result to the correct reconciliation above.
+"""),
+        code_cell('''spark.sql(f"""
+WITH bad_join AS (
+  SELECT f.line_id, f.line_revenue, f.is_completed
+  FROM {GOLD}.fact_sales_dashboard f
+  JOIN {GOLD}.dim_product p ON f.category = p.category
 )
 SELECT
-  check_name,
-  issue_count,
-  CASE WHEN issue_count = 0 THEN 20 ELSE greatest(0, 20 - issue_count / 20) END AS score_component
-FROM checks
-""")
+  COUNT(*) AS rows_after_fanout_join,
+  (SELECT COUNT(*) FROM {GOLD}.fact_sales_dashboard) AS rows_before_join,
+  ROUND(SUM(CASE WHEN is_completed THEN line_revenue ELSE 0 END), 2) AS inflated_revenue,
+  (SELECT ROUND(SUM(CASE WHEN is_completed THEN line_revenue ELSE 0 END), 2) FROM {GOLD}.fact_sales_dashboard) AS correct_revenue
+FROM bad_join
+""").show()'''),
+        md_cell("""## M2-05: Data quality score - breakdown and severity
 
-quality.createOrReplaceTempView("dq_components")
-quality.show()
+Reuses Block 1's expanded bad-data-lab checks (orphan refs, revenue
+mismatch, exact duplicates, null prices, bad statuses, future dates) and
+turns them into a numeric/categorical score with a severity threshold per
+issue type.
+"""),
+        code_cell('''dq_checks = spark.sql(f"""
+WITH checks AS (
+  SELECT 'missing_price' AS issue_type, 'high' AS severity, COUNT(*) AS issue_count
+  FROM {SILVER}.order_lines WHERE unit_price IS NULL
+  UNION ALL
+  SELECT 'invalid_status', 'medium', COUNT(*)
+  FROM {SILVER}.sales_orders WHERE status NOT IN ('Completed','Cancelled','Returned')
+  UNION ALL
+  SELECT 'future_order_date', 'high', COUNT(*)
+  FROM {SILVER}.sales_orders WHERE order_date > current_date()
+  UNION ALL
+  SELECT 'orphan_customer_id', 'high', COUNT(*)
+  FROM {SILVER}.order_lines l LEFT ANTI JOIN {SILVER}.customers c ON l.customer_id = c.customer_id
+  UNION ALL
+  SELECT 'orphan_product_id', 'high', COUNT(*)
+  FROM {SILVER}.order_lines l LEFT ANTI JOIN {SILVER}.products p ON l.product_id = p.product_id
+  UNION ALL
+  SELECT 'exact_duplicate_line', 'medium', COUNT(*) FROM (
+    SELECT order_id, product_id FROM {SILVER}.order_lines
+    GROUP BY order_id, product_id HAVING COUNT(*) > 1
+  )
+  UNION ALL
+  SELECT 'revenue_mismatch_header_vs_lines', 'high', COUNT(*) FROM (
+    SELECT o.order_id FROM {SILVER}.sales_orders o
+    JOIN {SILVER}.order_lines l ON o.order_id = l.order_id
+    GROUP BY o.order_id, o.order_total_amount
+    HAVING ABS(o.order_total_amount - SUM(l.line_revenue)) > 0.01
+  )
+)
+SELECT
+  issue_type,
+  severity,
+  issue_count,
+  CASE severity WHEN 'high' THEN 3 WHEN 'medium' THEN 2 ELSE 1 END AS severity_weight,
+  CASE
+    WHEN issue_count = 0 THEN 0.0
+    ELSE ROUND(issue_count * (CASE severity WHEN 'high' THEN 3 WHEN 'medium' THEN 2 ELSE 1 END) / 100.0, 2)
+  END AS penalty_points
+FROM checks
+ORDER BY penalty_points DESC
+""")
+dq_checks.createOrReplaceTempView("dq_breakdown")
+dq_checks.show(truncate=False)
+
 spark.sql(f"""
-CREATE OR REPLACE TABLE {GOLD}.data_quality_score AS
+CREATE OR REPLACE TABLE {GOLD}.data_quality_score
+COMMENT 'Gold data quality scorecard: 100 minus weighted penalty points per issue type/severity from the bad-data-lab checks. Recomputed each time Module 2 runs.'
+AS
 SELECT
   current_timestamp() AS calculated_at,
-  ROUND(SUM(score_component), 1) AS score
-FROM dq_components
+  ROUND(GREATEST(0, 100 - SUM(penalty_points)), 1) AS score
+FROM dq_breakdown
 """)
 spark.sql(f"SELECT * FROM {GOLD}.data_quality_score").show()'''),
-        code_cell('''spark.sql(f"""
-SELECT
-  status,
-  category,
-  order_date,
-  unit_price,
-  line_revenue,
-  line_margin
-FROM {GOLD}.fact_sales_dashboard
-WHERE unit_price IS NULL
-   OR status NOT IN ('Completed','Cancelled','Returned')
-   OR order_date > current_date()
-ORDER BY order_date DESC
-LIMIT 25
+        md_cell("""## Sample bad rows per issue type
+
+One or two concrete rows per issue type, so the score is not an abstract
+number - participants can see exactly which records are failing and why.
+"""),
+        code_cell('''print("-- missing_price (silver.order_lines) --")
+spark.sql(f"""
+SELECT line_id, order_id, product_id, unit_price FROM {SILVER}.order_lines
+WHERE unit_price IS NULL LIMIT 2
+""").show(truncate=False)
+
+print("-- orphan_customer_id (silver.order_lines) --")
+spark.sql(f"""
+SELECT l.line_id, l.order_id, l.customer_id FROM {SILVER}.order_lines l
+LEFT ANTI JOIN {SILVER}.customers c ON l.customer_id = c.customer_id
+LIMIT 2
+""").show(truncate=False)
+
+print("-- revenue_mismatch_header_vs_lines (silver.sales_orders) --")
+spark.sql(f"""
+SELECT o.order_id, o.order_total_amount, ROUND(SUM(l.line_revenue), 2) AS lines_sum
+FROM {SILVER}.sales_orders o JOIN {SILVER}.order_lines l ON o.order_id = l.order_id
+GROUP BY o.order_id, o.order_total_amount
+HAVING ABS(o.order_total_amount - SUM(l.line_revenue)) > 0.01
+LIMIT 2
+""").show(truncate=False)
+
+print("-- exact_duplicate_line (silver.order_lines) --")
+spark.sql(f"""
+SELECT order_id, product_id, COUNT(*) AS dup_count FROM {SILVER}.order_lines
+GROUP BY order_id, product_id HAVING COUNT(*) > 1 LIMIT 2
 """).show(truncate=False)'''),
+        md_cell("""## Decision: fix in Silver, Gold, or the report layer?
+
+Where a fix belongs depends on whether the issue is a data-entry problem
+(fix upstream/Silver), a business-rule decision (encode in Gold), or a
+presentation choice (handle in the report layer).
+
+| Issue type | Fix layer | Reasoning |
+|---|---|---|
+| `missing_price` | Silver | Source data defect; Gold should not guess a price. Block the row or flag it until corrected at the source. |
+| `orphan_customer_id` / `orphan_product_id` | Silver | Referential integrity belongs in Silver - Gold dimensions should only ever join cleanly. Quarantine orphan rows before they reach Gold. |
+| `revenue_mismatch_header_vs_lines` | Gold (documented), Silver (root cause) | Gold should pick one source of truth (lines, since that is the agreed Revenue KPI definition) and document the caveat; Silver/source should still investigate why headers drift. |
+| `exact_duplicate_line` | Silver | Deduplication is a cleaning responsibility - Gold should never have to deduplicate at read time, that is expensive and easy to get wrong per-report. |
+| `invalid_status` (out-of-dictionary) | Gold | This is a business-rule mapping decision (how do we treat `'Unknown'`?), not a data-entry fix - encode the mapping once in Gold so every report applies it the same way. |
+| `future_order_date` | Report layer (filter) + Silver (alert) | Showing future-dated orders in a "this month" report is a presentation bug - filter in the report/semantic layer, but also alert Silver owners since it likely signals a clock or feed issue. |
+"""),
         md_cell("""## Lineage and discoverability
 
 ![Catalog Explorer lineage](../assets/images/source_catalog_explorer_lineage.png)
@@ -1920,15 +2127,58 @@ Trainer prompt:
 - Which object would you certify?
 - Which object would you hide from BI users?
 - Which object should have the clearest owner and description?
-"""),
-        md_cell("""## Decision card: view vs table vs aggregate
+
+### Decision card: view vs table vs aggregate
 
 | Option | Use when | Risk |
 |---|---|---|
 | View | logic is simple and source is small | repeated cost on every query |
 | Table | stable BI source, scheduled refresh | needs orchestration |
 | Aggregate | summary page or DirectQuery | lower detail, needs grain discipline |
+
+## M2-06: Bonus (dla szybszych grup)
+
+This section is genuinely optional - skip it if the group is on schedule or
+behind. It introduces a Metric View / materialized aggregate as an advanced
+topic on top of what was already built.
 """),
+        md_cell("""### Bonus: Metric View or materialized aggregate
+
+A Databricks Unity Catalog **Metric View** lets you define measures and
+dimensions once (centrally governed) so every consumer - SQL, Power BI,
+Genie - gets the same KPI math without re-deriving it per report. Where a
+Metric View is not available in your workspace/runtime, a materialized
+aggregate table (what we already built as `fact_sales_dashboard_monthly`)
+is the practical fallback.
+
+Discussion prompts for fast groups:
+
+- Which KPIs from the dictionary above are safe to pre-aggregate, and which
+  must stay computable at line-grain (e.g. return rate needs order-level
+  distinctness, not just a sum)?
+- What happens to the Metric View / aggregate when a new KPI is added later
+  - do consumers need to change their queries?
+- How would you version a breaking change to a KPI definition without
+  silently changing historical dashboard numbers?
+"""),
+        code_cell('''# Bonus hands-on: an additional materialized aggregate by year_month, segment
+# and category - a finer-grained alternative to fact_sales_dashboard_monthly,
+# useful for a segment/category drill-through page.
+spark.sql(f"""
+CREATE OR REPLACE TABLE {GOLD}.fact_sales_dashboard_segment_monthly
+COMMENT 'Bonus materialized aggregate: one row per year_month x segment x category, for segment/category drill-through pages.'
+AS
+SELECT
+  date_format(order_date, 'yyyy-MM') AS year_month,
+  segment,
+  category,
+  SUM(CASE WHEN is_completed THEN line_revenue ELSE 0 END) AS revenue,
+  SUM(CASE WHEN is_completed THEN line_margin ELSE 0 END) AS gross_margin,
+  COUNT(DISTINCT CASE WHEN is_completed THEN order_id END) AS completed_orders
+FROM {GOLD}.fact_sales_dashboard
+GROUP BY date_format(order_date, 'yyyy-MM'), segment, category
+""")
+spark.sql(f"SELECT * FROM {GOLD}.fact_sales_dashboard_segment_monthly ORDER BY year_month LIMIT 10").show()'''),
         md_cell("""## Optional extension for longer delivery
 
 If the group is strong or the course has 8-9 hours:
@@ -1936,8 +2186,8 @@ If the group is strong or the course has 8-9 hours:
 - add a Type 2 dimension example for customer segment changes,
 - add table and column comments for BI discoverability,
 - compare `fact_sales_dashboard` as a view vs table,
-- create an additional aggregate by `year_month`, `segment` and `category`,
-- ask participants to write the final KPI dictionary row by row.
+- ask participants to write the final KPI dictionary row by row using
+  `docs/templates/kpi-dictionary.md`.
 """),
     ]
     write_notebook(ROOT / "notebooks/m2_gold_kpi_best_practices.ipynb", cells)

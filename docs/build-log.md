@@ -218,3 +218,73 @@ licząc helper-markdown), orphan reference checks (`LEFT ANTI JOIN` x2),
 revenue mismatch (`order_total_amount`, `revenue_mismatch_count`), exact
 duplicate (`exact_dup_count`, `HAVING COUNT`), 9x `assert` w FND-01 blokach,
 `precheck_cell` zdefiniowany raz i wywolany raz w generatorze.
+
+## Medi Block 2 - Module 2 expansion
+
+Rozbudowa `notebook_module_2()` w `scripts/build_materials_v1.py`
+(`m2_gold_kpi_best_practices.ipynb`) wedlug backlog taskow M2-01 do M2-06 z
+`docs/06-notebook-review-and-expansion-tasks.md`. 26 -> 36 komorek
+(20 markdown, 16 code).
+
+**M2-01 — Medallion explanation.** Dodano tabele porownawcza Bronze/Silver/
+Gold (ownership, quality bar, latency, consumers) oraz sekcje "co nie
+powinno trafic do Gold" i "Gold vs ad-hoc working view analityka".
+
+**M2-02 — Kimball step-by-step.** Grain zadeklarowany PRZED budowa
+(`one row = one order line...`). Dodano recap istniejacych wymiarow
+(`dim_date`, `dim_customer`, `dim_product` z generatora — `DESCRIBE TABLE` +
+przyklad danych), istniejacy diagram `kimball_gold_model.png` (sprawdzono,
+juz byl referencjonowany — bez duplikacji). Zbudowano NOWY obiekt
+`gold.fact_sales_dashboard` (denormalizowany, dashboard-ready, odrebny od
+`gold.fact_sales` generatora) + `gold.fact_sales_dashboard_monthly`, oba z
+`COMMENT`.
+
+**M2-03 — KPI dictionary w notebooku.** Tabela markdown Revenue/Gross
+margin/Return rate/Orders/DQ score z business + SQL definition side by
+side, nastepnie zapytanie SQL materializujace `kpi_dictionary_snapshot`
+temp view jako rzeczywista praca w notebooku (nie tylko referencja do
+`docs/templates/kpi-dictionary.md`).
+
+**M2-04 — Reconciliation checks.** Porownanie revenue `gold.fact_sales` vs
+`gold.fact_sales_dashboard` (powinny sie zgadzac), reconciliation
+detail-vs-aggregate, oraz NOWA sekcja "deliberately bad join (fan-out)" —
+join po `category` zamiast `product_id` pokazuje inflacje wierszy/revenue.
+Dodano explicit `COUNT(DISTINCT)` pitfall (line-grain count bez DISTINCT
+zawyza liczbe zamowien).
+
+**M2-05 — Data quality score breakdown.** Rozszerzono score o
+issue_type/severity (high/medium) z penalty_points, leverage Block 1
+checks (orphan_customer_id, orphan_product_id, revenue_mismatch,
+exact_duplicate_line, missing_price, invalid_status, future_order_date).
+Dodano sekcje sample bad rows (1-2 wiersze per issue type) i decision
+table "Silver vs Gold vs report layer" z uzasadnieniem per typ problemu.
+
+**M2-06 — Bonus.** Sekcja "M2-06: Bonus (dla szybszych grup)", oznaczona
+jako genuinely optional/skippable — dyskusja o Metric View vs materialized
+aggregate + hands-on `gold.fact_sales_dashboard_segment_monthly`.
+
+**GLOBAL-01 reuse.** Stary inline `missing = [...]` pre-check w module 2
+zastapiony wywolaniem `precheck_cell(["{GOLD}.dim_date", ...,
+"{GOLD}.fact_sales"], "data/generate_training_dataset.ipynb")` — pierwszy
+przypadek reuse helpera poza generatorem, zgodnie z planem z Block 1.
+
+### Weryfikacja
+
+```
+.venv/bin/python scripts/build_materials_v1.py
+# -> "Built Databricks-Data-Analyst-Medi v1 materials" (bez bledow)
+
+nbformat.read(as_version=4) + nbformat.validate(): PASS
+m2_gold_kpi_best_practices.ipynb: 26 -> 36 cells (20 markdown, 16 code)
+Niemagiczne komorki Python skompilowane: 15/15 OK (1 magic %run pominieta)
+
+Walidacja WSZYSTKICH notebookow w repo (nbformat + compile): 11/11 PASS
+(data/generate_training_dataset.ipynb 24, m1 20, m2 36, m3 17, m4 15,
+setup x2 (4, 3), w1 exercise/solution 16/19, w2 exercise/solution 14/17)
+```
+
+Grep proof: `precheck_cell` uzyty 2x (generator + module 2), `CREATE OR
+REPLACE TABLE {GOLD}.fact_sales_dashboard` obecny, KPI dictionary terms
+(Revenue/Gross margin/Return rate/Orders/DQ score) obecne, reconciliation +
+fan-out sekcje obecne, DQ severity/penalty_points breakdown obecny, "Bonus"
+heading obecny (M2-06 + hands-on cell).
