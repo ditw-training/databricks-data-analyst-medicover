@@ -1,0 +1,39 @@
+# Reference DABs / Declarative Automation Bundles example.
+# Validate against the current Databricks CLI/docs before live use.
+
+bundle:
+  name: retailhub_kpi_dashboard
+
+variables:
+  catalog:
+    description: Target Unity Catalog catalog
+    default: training_dbx_ana_medi_trainer
+
+resources:
+  jobs:
+    refresh_gold_bi_dataset:
+      name: refresh_gold_bi_dataset
+      tasks:
+        - task_key: validate_sources
+          notebook_task:
+            notebook_path: ../notebooks/m1_sql_warehouse_notebooks.ipynb
+        - task_key: refresh_gold
+          depends_on:
+            - task_key: validate_sources
+          notebook_task:
+            notebook_path: ../notebooks/m2_gold_kpi_best_practices.ipynb
+        - task_key: build_bi_dataset
+          depends_on:
+            - task_key: refresh_gold
+          notebook_task:
+            notebook_path: ../notebooks/m3_powerbi_semantic_dataset.ipynb
+
+targets:
+  dev:
+    mode: development
+    variables:
+      catalog: training_dbx_ana_medi_dev
+  prod:
+    mode: production
+    variables:
+      catalog: training_dbx_ana_medi_prod
