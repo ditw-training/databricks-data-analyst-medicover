@@ -288,3 +288,71 @@ REPLACE TABLE {GOLD}.fact_sales_dashboard` obecny, KPI dictionary terms
 (Revenue/Gross margin/Return rate/Orders/DQ score) obecne, reconciliation +
 fan-out sekcje obecne, DQ severity/penalty_points breakdown obecny, "Bonus"
 heading obecny (M2-06 + hands-on cell).
+
+## Medi Block 3 — Workshop 1 expansion
+
+Zakres: `docs/06-notebook-review-and-expansion-tasks.md` W1-01..W1-04,
+funkcja `notebook_workshop_1(solution: bool)` w
+`scripts/build_materials_v1.py` (jedna funkcja generuje exercise i solution).
+
+**W1-01 — Pre-check.** Stary inline `missing = [...]` zastapiony wywolaniem
+`precheck_cell(["{GOLD}.fact_sales_dashboard",
+"{GOLD}.fact_sales_dashboard_monthly"],
+"notebooks/m2_gold_kpi_best_practices.ipynb")` — drugi przypadek reuse
+helpera (po module 2) poza generatorem. Dodano markdown z pelnym
+prerequisite chain (00_pre_config -> generate_training_dataset -> module 2)
+i jawnym komunikatem "uruchom modul 2 najpierw" jesli tabele brakuja.
+
+**W1-02 — 5-task split.** Warsztat rozbity na dokladnie 5 ponumerowanych
+zadan (Zadanie 1-5), kazde jako osobna sekcja markdown + komorki kodu:
+1. zbuduj `gold.fact_sales_dashboard_channel_daily` (nowa tabela, grain
+   order_date x channel — inny niz module 2's monthly/segment_monthly),
+2. zdefiniuj 4 NOWE KPI nieobecne w slowniku modulu 2 (Average Order Value,
+   Margin Rate %, Completed Share by Region, Revenue per Channel-Day),
+3. znajdz min. 3 data-quality issues bezposrednio w
+   `gold.fact_sales_dashboard` (w tym NULL po left joinie — nowy kontekst
+   vs silver-level checks z modulu 2),
+4. reconciliation: rollup Task 1 tabeli do (year_month, channel) vs
+   `fact_sales_dashboard_monthly` rolled down do tego samego grain,
+5. wypelnienie prawdziwego wiersza `docs/templates/decision-log.md` jako
+   worked example (table vs view decyzja z Task 1).
+
+**W1-03 — Expected outputs.** Kazde z 5 zadan w exercise ma sekcje
+"Oczekiwany wynik (rubric)" z konkretnymi kryteriami (oczekiwane kolumny,
+typy problemow, minimalne kryteria sukcesu) zamiast ogolnikowego hinta.
+
+**W1-04 — Solution expansion.** Pelny SQL dla wszystkich 5 zadan, z
+komentarzami markdown "Dlaczego" przed kazdym blokiem kodu tlumaczacymi
+decyzje projektowe (np. dlaczego table a nie view, dlaczego DISTINCT order
+count), plus min. 1 "Alternative considered" notatka per nietrywialne
+zadanie (Zadanie 1, 3, 4) opisujaca tradeoff.
+
+### Weryfikacja
+
+```
+.venv/bin/python scripts/build_materials_v1.py
+# -> "Built Databricks-Data-Analyst-Medi v1 materials" (bez bledow)
+
+nbformat.read(as_version=4) + nbformat.validate(): PASS na obu plikach
+w1_gold_kpi_exercise.ipynb: 16 -> 19 cells, compile_errors=0 [OK]
+w1_gold_kpi_solution.ipynb: 19 -> 22 cells, compile_errors=0 [OK]
+
+Walidacja WSZYSTKICH notebookow w repo (nbformat + compile): 11/11 PASS
+(data/generate_training_dataset.ipynb 24, m1 20, m2 36, m3 17, m4 15,
+setup x2 (4, 3), w1 exercise/solution 16->19/19->22, w2 exercise/solution
+14/17 — w2 niezmieniony, content stabilny)
+```
+
+Grep proof: `precheck_cell` uzyty w `notebook_workshop_1` (linia ~2523),
+exercise zawiera 21x `TODO` i wszystkie 5 naglowkow "Zadanie 1".."Zadanie
+5", solution zawiera 0x `TODO` i te same 5 naglowkow w pelni rozwiazane,
+oba pliki referencja `gold.fact_sales_dashboard` (25x exercise, 35x
+solution), exercise ma 5x "Oczekiwany wynik" (po jednym per zadanie),
+solution zawiera filled decision-log row (data 2026-06-23, wszystkie
+kolumny wypelnione, zero TODO).
+
+Uwaga: cell-count exercise (19) jest nieznacznie powyzej dolnego targetu
+14-18 z backlogu — zaakceptowano, bo kazda z 5 sekcji wymaga osobnej
+markdown (zadanie + rubric) i code cell, a tresc jest genuinely nowa
+(nowe KPI, nowa tabela, nowy reconciliation pair), nie relabeling
+istniejacych 2-3 zadan.

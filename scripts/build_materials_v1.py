@@ -2491,205 +2491,433 @@ def notebook_workshop_1(solution: bool) -> None:
     cells = [
         md_cell(f"""# Workshop 1 - Gold KPI package ({title})
 
-Goal: build a BI-ready Gold object, define KPI, validate data quality and write
-the decision log.
+Goal: extend the BI-ready Gold objects from Module 2 with a new reporting
+slice, define a NEW set of KPI, hunt for data-quality issues, reconcile two
+aggregates and fill the decision log - the full path from raw Gold table to a
+defensible BI number.
 
 ![Workshop success criteria](../assets/images/workshop_success_criteria.png)
+
+This workshop is split into exactly 5 tasks (W1-02). Each task has an
+"Expected output" callout (W1-03) that doubles as a grading rubric - if your
+result does not match the callout, the task is not done yet.
 """),
         code_cell("""%run ../setup/00_setup"""),
         md_cell("""## Success criteria
 
 You are done when:
 
-1. `gold.fact_sales_dashboard` exists and has documented grain.
-2. Revenue, Gross Margin and Return Rate are calculated from Gold.
-3. Detail totals reconcile with the monthly aggregate.
-4. At least three data-quality issues are named with example rows.
-5. A view/table/aggregate decision is justified.
+1. `gold.fact_sales_dashboard_channel_daily` exists with the documented grain.
+2. Average Order Value, Margin Rate % and Completed Share by Region are
+   calculated from Gold - these are NOT the same KPI Module 2 already showed
+   you (Revenue, Gross Margin, Return Rate, Orders) - you are extending the
+   dictionary, not repeating it.
+3. At least three data-quality issues are named with example rows, using the
+   bad-data-lab patterns from the data generator.
+4. Two aggregates that should agree are reconciled, and any mismatch is
+   explained.
+5. The decision log (`docs/templates/decision-log.md`) has a real, filled-in
+   row for this workshop's reporting-source decision.
 6. The self-check cell passes.
 """),
-        md_cell("""## Runtime pre-check
+        precheck_cell(
+            [
+                "{GOLD}.fact_sales_dashboard",
+                "{GOLD}.fact_sales_dashboard_monthly",
+            ],
+            "notebooks/m2_gold_kpi_best_practices.ipynb",
+        ),
+        md_cell("""## Prerequisite chain
 
-Run Module 2 before this workshop. The workshop starts from the BI-ready Gold
-objects created there.
+This workshop is the last link in a chain. If the pre-check above failed,
+walk back through the chain in order:
+
+1. `setup/00_pre_config.ipynb`
+2. `data/generate_training_dataset.ipynb`
+3. `notebooks/m2_gold_kpi_best_practices.ipynb` - uruchom modul 2 najpierw,
+   jesli `gold.fact_sales_dashboard` lub `gold.fact_sales_dashboard_monthly`
+   nie istnieja. Ten warsztat startuje dokladnie tam, gdzie modul 2 konczy.
 """),
-        code_cell("""required_tables = [
-    f"{GOLD}.fact_sales_dashboard",
-    f"{GOLD}.fact_sales_dashboard_monthly",
-]
+        md_cell("""## The 5 tasks
 
-missing = [table for table in required_tables if not spark.catalog.tableExists(table)]
-if missing:
-    raise Exception("Missing tables. Run Module 2 first: " + ", ".join(missing))
-
-print("[OK] Workshop inputs exist")"""),
-        md_cell("""## Tasks
-
-1. Build or inspect `gold.fact_sales_dashboard`.
-2. Define Revenue, Gross Margin and Return Rate.
-3. Find at least three data-quality issues.
-4. Decide whether the reporting source should be a view, table or aggregate.
-5. Fill the KPI dictionary and decision log templates.
-6. Prepare a short BI contract paragraph for Power BI.
+1. **Zadanie 1 - zbuduj reporting table.** Build a new Gold object,
+   `gold.fact_sales_dashboard_channel_daily`, one level more granular in time
+   (daily, not monthly) and narrower in dimensions (channel only) than
+   anything Module 2 built - a realistic "BI asked for a daily channel view"
+   request.
+2. **Zadanie 2 - zdefiniuj KPI.** Define four KPI that Module 2's dictionary
+   does NOT already contain: Average Order Value, Margin Rate %, Completed
+   Share by Region and Revenue per Channel-Day.
+3. **Zadanie 3 - znajdz data quality issues.** Find at least three
+   data-quality issues directly in `gold.fact_sales_dashboard`, with example
+   rows, using the bad-data-lab patterns.
+4. **Zadanie 4 - zrob reconciliation.** Compare your new daily-channel
+   aggregate against `gold.fact_sales_dashboard_monthly` for the same scope
+   and prove they agree (or explain why they do not).
+5. **Zadanie 5 - wypelnij decision log.** Fill a real row in the decision log
+   for the table-vs-view-vs-aggregate choice you made in Task 1.
 """),
     ]
     if solution:
         cells.extend([
-            md_cell("""## Task 1 - inspect grain"""),
+            md_cell("""## Zadanie 1 - zbuduj reporting table
+
+**Dlaczego:** Module 2 already gave us a monthly aggregate
+(`fact_sales_dashboard_monthly`) and a segment/category aggregate (the Bonus
+`fact_sales_dashboard_segment_monthly`). Neither answers "how did each
+channel perform yesterday?" - a daily, channel-only grain is a genuinely new
+reporting need, not a copy of what already exists. We build it as a table
+(not a view) because BI will hit it repeatedly and the source detail table
+is large enough that repeated re-aggregation on every Power BI query would
+be wasteful.
+
+**Alternative considered:** a view would avoid a refresh job, but every
+DirectQuery page render would re-scan and re-aggregate
+`fact_sales_dashboard`. For a daily-refreshed channel dashboard, the
+materialized-table cost (one scheduled job) is cheaper than the
+query-time cost (many ad-hoc scans), so we choose table + scheduled refresh.
+"""),
+            code_cell('''spark.sql(f"""
+CREATE OR REPLACE TABLE {GOLD}.fact_sales_dashboard_channel_daily
+COMMENT 'Workshop 1 reporting table: one row per order_date x channel, materialized as a table (not a view) because it is refreshed on a schedule and queried repeatedly by Power BI - see decision log.'
+AS
+SELECT
+  order_date,
+  channel,
+  COUNT(DISTINCT CASE WHEN is_completed THEN order_id END) AS completed_orders,
+  SUM(CASE WHEN is_completed THEN line_revenue ELSE 0 END) AS revenue,
+  SUM(CASE WHEN is_completed THEN line_margin ELSE 0 END) AS gross_margin
+FROM {GOLD}.fact_sales_dashboard
+GROUP BY order_date, channel
+""")
+print("[OK] gold.fact_sales_dashboard_channel_daily created")
+
+spark.sql(f"""
+SELECT COUNT(*) AS rows, COUNT(DISTINCT (order_date, channel)) AS distinct_grain_keys
+FROM {GOLD}.fact_sales_dashboard_channel_daily
+""").show()'''),
+            md_cell("""## Zadanie 2 - zdefiniuj KPI
+
+**Dlaczego:** Average Order Value needs revenue divided by a DISTINCT order
+count (the same distinct-count trap Module 2 flagged) - not a per-line
+average. Margin Rate % is a ratio, not a sum, so it must be computed after
+aggregation, never pre-averaged per row. Completed Share by Region needs the
+denominator to include both completed and non-completed orders for that
+region, otherwise the "share" is meaningless (always 100%).
+"""),
             code_cell('''spark.sql(f"""
 SELECT
-  COUNT(*) AS rows,
-  COUNT(DISTINCT line_id) AS distinct_line_ids,
-  COUNT(*) - COUNT(DISTINCT line_id) AS duplicate_line_ids
+  ROUND(
+    SUM(CASE WHEN is_completed THEN line_revenue ELSE 0 END)
+    / NULLIF(COUNT(DISTINCT CASE WHEN is_completed THEN order_id END), 0),
+    2
+  ) AS avg_order_value,
+  ROUND(
+    100.0 * SUM(CASE WHEN is_completed THEN line_margin ELSE 0 END)
+    / NULLIF(SUM(CASE WHEN is_completed THEN line_revenue ELSE 0 END), 0),
+    2
+  ) AS margin_rate_pct
 FROM {GOLD}.fact_sales_dashboard
 """).show()'''),
-            md_cell("""## Task 2 - KPI definitions"""),
             code_cell('''spark.sql(f"""
 SELECT
-  SUM(CASE WHEN is_completed THEN line_revenue ELSE 0 END) AS revenue,
-  SUM(CASE WHEN is_completed THEN line_margin ELSE 0 END) AS gross_margin,
-  COUNT(DISTINCT CASE WHEN is_returned THEN order_id END) AS returned_orders,
+  customer_region,
+  COUNT(DISTINCT order_id) AS all_orders,
   COUNT(DISTINCT CASE WHEN is_completed THEN order_id END) AS completed_orders,
   ROUND(
-    COUNT(DISTINCT CASE WHEN is_returned THEN order_id END)
-    / NULLIF(
-        COUNT(DISTINCT CASE WHEN is_completed THEN order_id END)
-        + COUNT(DISTINCT CASE WHEN is_returned THEN order_id END),
-        0
-      ),
-    4
-  ) AS return_rate
+    100.0 * COUNT(DISTINCT CASE WHEN is_completed THEN order_id END)
+    / NULLIF(COUNT(DISTINCT order_id), 0),
+    2
+  ) AS completed_share_pct
 FROM {GOLD}.fact_sales_dashboard
-""").show()'''),
-            md_cell("""## Task 3 - quality issues with evidence"""),
-            code_cell('''spark.sql(f"""
-SELECT 'missing_price' AS issue, COUNT(*) AS rows FROM {GOLD}.fact_sales_dashboard WHERE unit_price IS NULL
-UNION ALL SELECT 'invalid_status', COUNT(*) FROM {GOLD}.fact_sales_dashboard WHERE status NOT IN ('Completed','Cancelled','Returned')
-UNION ALL SELECT 'future_order_date', COUNT(*) FROM {GOLD}.fact_sales_dashboard WHERE order_date > current_date()
+GROUP BY customer_region
+ORDER BY completed_share_pct DESC
 """).show()'''),
             code_cell('''spark.sql(f"""
-SELECT line_id, order_id, order_date, status, category, unit_price, line_revenue
+SELECT order_date, channel, revenue,
+       ROUND(revenue / NULLIF(completed_orders, 0), 2) AS revenue_per_completed_order
+FROM {GOLD}.fact_sales_dashboard_channel_daily
+ORDER BY order_date DESC, channel
+LIMIT 10
+""").show()'''),
+            md_cell("""## Zadanie 3 - znajdz data quality issues
+
+**Dlaczego:** Module 2's DQ score runs against `silver.*`. Here we check the
+same families of issues directly against `gold.fact_sales_dashboard` to show
+participants that a left join does not "clean" orphan references - it turns
+them into NULL dimension attributes that silently break any GROUP BY on
+`segment`, `customer_region`, `category` or `subcategory`. That is a
+different, Gold-specific symptom of the same Silver-layer root cause.
+"""),
+            code_cell('''spark.sql(f"""
+SELECT 'missing_unit_price' AS issue_type, COUNT(*) AS issue_count
+FROM {GOLD}.fact_sales_dashboard WHERE unit_price IS NULL
+UNION ALL
+SELECT 'invalid_status', COUNT(*)
+FROM {GOLD}.fact_sales_dashboard WHERE status NOT IN ('Completed','Cancelled','Returned')
+UNION ALL
+SELECT 'future_order_date', COUNT(*)
+FROM {GOLD}.fact_sales_dashboard WHERE order_date > current_date()
+UNION ALL
+SELECT 'null_customer_region_after_join', COUNT(*)
+FROM {GOLD}.fact_sales_dashboard WHERE customer_region IS NULL
+UNION ALL
+SELECT 'null_category_after_join', COUNT(*)
+FROM {GOLD}.fact_sales_dashboard WHERE category IS NULL
+ORDER BY issue_count DESC
+""").show()'''),
+            code_cell('''spark.sql(f"""
+SELECT line_id, order_id, order_date, status, customer_region, category, unit_price, line_revenue
 FROM {GOLD}.fact_sales_dashboard
 WHERE unit_price IS NULL
    OR status NOT IN ('Completed','Cancelled','Returned')
    OR order_date > current_date()
+   OR customer_region IS NULL
+   OR category IS NULL
 ORDER BY order_date DESC
 LIMIT 20
 """).show(truncate=False)'''),
-            md_cell("""## Task 4 - reconciliation"""),
-            code_cell('''spark.sql(f"""
-WITH detail AS (
-  SELECT ROUND(SUM(CASE WHEN is_completed THEN line_revenue ELSE 0 END), 2) AS revenue
-  FROM {GOLD}.fact_sales_dashboard
-),
-agg AS (
-  SELECT ROUND(SUM(revenue), 2) AS revenue
-  FROM {GOLD}.fact_sales_dashboard_monthly
-)
-SELECT detail.revenue AS detail_revenue, agg.revenue AS agg_revenue, detail.revenue - agg.revenue AS diff
-FROM detail CROSS JOIN agg
-""").show()'''),
-            md_cell("""## Suggested decision
-
-Use a table for `gold.fact_sales_dashboard` and an aggregate for summary report
-pages. Avoid DirectQuery on Silver detail tables.
+            md_cell("""**Alternative considered:** these checks could instead run against
+`silver.order_lines`/`silver.customers`/`silver.products` directly (as
+Module 2's `dq_breakdown` does) to catch issues before they reach Gold. We
+deliberately check Gold here too, because a Gold-level check catches a
+different failure mode: a join bug or a stale dimension table that
+introduces NULLs even when Silver itself is clean. Production setups should
+have both - Silver gate AND Gold spot-check.
 """),
-            md_cell("""## Suggested BI contract paragraph
+            md_cell("""## Zadanie 4 - zrob reconciliation
 
-The executive dashboard uses `gold.fact_sales_dashboard_monthly` for summary
-pages and `gold.fact_sales_dashboard` for detail validation. Grain is one row
-per month, customer region, category and channel in the aggregate. Revenue and
-gross margin include completed orders only. DirectQuery must not read Silver
-detail tables.
+**Dlaczego:** `fact_sales_dashboard_channel_daily` (Task 1) and
+`fact_sales_dashboard_monthly` (Module 2) are two independently aggregated
+views of the same detail table, sliced on different dimensions (channel+day
+vs region+category+channel+month). If we roll the daily-channel table up to
+month+channel and compare it against the monthly table rolled down to
+month+channel, the revenue totals must match exactly - this proves both
+aggregates trace back to the same detail rows with no double-counting or
+silent filter drift.
+"""),
+            code_cell('''spark.sql(f"""
+WITH from_daily AS (
+  SELECT date_format(order_date, 'yyyy-MM') AS year_month, channel,
+         ROUND(SUM(revenue), 2) AS revenue
+  FROM {GOLD}.fact_sales_dashboard_channel_daily
+  GROUP BY date_format(order_date, 'yyyy-MM'), channel
+),
+from_monthly AS (
+  SELECT year_month, channel, ROUND(SUM(revenue), 2) AS revenue
+  FROM {GOLD}.fact_sales_dashboard_monthly
+  GROUP BY year_month, channel
+)
+SELECT
+  d.year_month, d.channel,
+  d.revenue AS daily_rollup_revenue,
+  m.revenue AS monthly_table_revenue,
+  ROUND(d.revenue - m.revenue, 2) AS diff
+FROM from_daily d
+JOIN from_monthly m ON d.year_month = m.year_month AND d.channel = m.channel
+ORDER BY ABS(d.revenue - m.revenue) DESC
+LIMIT 15
+""").show()'''),
+            md_cell("""**Alternative considered:** we could reconcile against `gold.fact_sales`
+(the generator's raw fact) instead of `fact_sales_dashboard_monthly`. That
+would also work, but it would only prove the join in `fact_sales_dashboard`
+is correct - it would not prove the two Gold-layer aggregates participants
+actually hand to BI agree with each other, which is the failure mode BI
+developers hit in practice (two dashboard tiles built from different
+aggregates showing different numbers).
+"""),
+            md_cell("""## Zadanie 5 - wypelnij decision log
+
+**Dlaczego:** a decision without a written reason is not reusable - the next
+person rebuilds the table-vs-view-vs-aggregate debate from scratch. This row
+is the actual `docs/templates/decision-log.md` entry for the Task 1 choice,
+filled as a worked example.
+
+| Date | Decision | Options considered | Chosen option | Reason | Consequence |
+|---|---|---|---|---|---|
+| 2026-06-23 | Reporting source for daily channel view | view / table / materialized aggregate | table (`fact_sales_dashboard_channel_daily`), scheduled refresh | repeated Power BI queries against a daily grain would re-scan and re-aggregate `fact_sales_dashboard` on every page load; a table makes the cost predictable and the refresh schedule explicit | requires a scheduled job (e.g. Lakeflow/Workflow) to keep the table current; consumers see data as of the last refresh, not real-time |
 """),
             md_cell("""## Self-check"""),
-            code_cell('''assert spark.catalog.tableExists(f"{GOLD}.fact_sales_dashboard"), "Missing dashboard fact"
-assert spark.catalog.tableExists(f"{GOLD}.fact_sales_dashboard_monthly"), "Missing monthly aggregate"
+            code_cell('''assert spark.catalog.tableExists(f"{GOLD}.fact_sales_dashboard_channel_daily"), "Missing Task 1 reporting table"
 
 grain = spark.sql(f"""
-SELECT COUNT(*) AS rows, COUNT(DISTINCT line_id) AS distinct_line_ids
-FROM {GOLD}.fact_sales_dashboard
+SELECT COUNT(*) AS rows, COUNT(DISTINCT (order_date, channel)) AS distinct_keys
+FROM {GOLD}.fact_sales_dashboard_channel_daily
 """).first()
-assert grain["rows"] >= grain["distinct_line_ids"], "Unexpected grain result"
+assert grain["rows"] == grain["distinct_keys"], "Channel-daily table grain is not unique on (order_date, channel)"
 
 recon = spark.sql(f"""
-WITH detail AS (
-  SELECT ROUND(SUM(CASE WHEN is_completed THEN line_revenue ELSE 0 END), 2) AS revenue
-  FROM {GOLD}.fact_sales_dashboard
+WITH from_daily AS (
+  SELECT date_format(order_date, 'yyyy-MM') AS year_month, channel, ROUND(SUM(revenue), 2) AS revenue
+  FROM {GOLD}.fact_sales_dashboard_channel_daily
+  GROUP BY date_format(order_date, 'yyyy-MM'), channel
 ),
-agg AS (
-  SELECT ROUND(SUM(revenue), 2) AS revenue
+from_monthly AS (
+  SELECT year_month, channel, ROUND(SUM(revenue), 2) AS revenue
   FROM {GOLD}.fact_sales_dashboard_monthly
+  GROUP BY year_month, channel
 )
-SELECT ABS(detail.revenue - agg.revenue) AS diff
-FROM detail CROSS JOIN agg
-""").first()["diff"]
-assert recon < 0.01, f"Aggregate does not reconcile: {recon}"
+SELECT MAX(ABS(d.revenue - m.revenue)) AS max_diff
+FROM from_daily d JOIN from_monthly m ON d.year_month = m.year_month AND d.channel = m.channel
+""").first()["max_diff"]
+assert recon < 0.01, f"Task 4 reconciliation does not hold: max diff {recon}"
 
 print("[OK] Workshop 1 self-check passed")'''),
         ])
     else:
         cells.extend([
-            md_cell("""## Task 1 - inspect grain
+            md_cell("""## Zadanie 1 - zbuduj reporting table
 
-Expected output: row count, distinct `line_id`, and duplicate count.
+Build `gold.fact_sales_dashboard_channel_daily`: one row per `order_date` x
+`channel`, with completed orders, revenue and gross margin, sourced from
+`gold.fact_sales_dashboard`. Decide table vs view (you will justify the
+choice in Task 5).
+
+**Oczekiwany wynik (rubric):**
+- table exists with columns `order_date, channel, completed_orders, revenue, gross_margin`,
+- `COUNT(*) == COUNT(DISTINCT (order_date, channel))` - grain is unique,
+- minimum success: the table is queryable and non-empty.
 """),
-            code_cell('''# TODO: inspect the grain of gold.fact_sales_dashboard.
+            code_cell('''# TODO: create gold.fact_sales_dashboard_channel_daily
+# grain: one row per (order_date, channel)
+# columns: completed_orders, revenue, gross_margin (completed orders only)
+spark.sql(f"""
+CREATE OR REPLACE TABLE {GOLD}.fact_sales_dashboard_channel_daily
+COMMENT 'TODO: add a comment describing the grain and refresh choice'
+AS
+SELECT
+  order_date,
+  channel
+  -- TODO: add completed_orders, revenue, gross_margin aggregates
+FROM {GOLD}.fact_sales_dashboard
+GROUP BY order_date, channel
+""")
+
+spark.sql(f"""
+SELECT COUNT(*) AS rows, COUNT(DISTINCT (order_date, channel)) AS distinct_grain_keys
+FROM {GOLD}.fact_sales_dashboard_channel_daily
+""").show()'''),
+            md_cell("""## Zadanie 2 - zdefiniuj KPI
+
+Define FOUR KPI that Module 2 did NOT already give you:
+
+1. Average Order Value (revenue / distinct completed orders - watch the
+   distinct-count trap from Module 2),
+2. Margin Rate % (gross margin as a percentage of revenue, computed AFTER
+   aggregation, not per-row),
+3. Completed Share by Region (completed orders / all orders, per
+   `customer_region`),
+4. Revenue per Channel-Day (from your Task 1 table).
+
+**Oczekiwany wynik (rubric):**
+- AOV and Margin Rate % are single numbers, both NULL-safe (`NULLIF` on the
+  denominator),
+- Completed Share by Region returns one row per region, share between 0 and 100,
+- minimum success: all four KPI use `COUNT(DISTINCT order_id)` where the
+  business definition needs a per-order count, never raw `COUNT(*)`.
+"""),
+            code_cell('''# TODO: Average Order Value and Margin Rate %
 spark.sql(f"""
 SELECT
+  -- TODO: avg_order_value = completed revenue / distinct completed orders
+  -- TODO: margin_rate_pct = 100 * completed margin / completed revenue
   COUNT(*) AS rows
-  -- add COUNT(DISTINCT line_id) and duplicate calculation
 FROM {GOLD}.fact_sales_dashboard
 """).show()'''),
-            md_cell("""## Task 2 - calculate KPI
-
-Expected output: Revenue, Gross Margin, Completed Orders, Returned Orders and
-Return Rate.
-"""),
-            code_cell('''# TODO: calculate Revenue, Gross Margin and Return Rate from Gold.
+            code_cell('''# TODO: Completed Share by Region
 spark.sql(f"""
 SELECT
-  -- add measures here
-  COUNT(*) AS rows
+  customer_region
+  -- TODO: add all_orders, completed_orders, completed_share_pct
 FROM {GOLD}.fact_sales_dashboard
+GROUP BY customer_region
 """).show()'''),
-            md_cell("""## Task 3 - find data-quality issues
+            code_cell('''# TODO: Revenue per Channel-Day, using your Task 1 table
+spark.sql(f"""
+SELECT order_date, channel, revenue
+  -- TODO: add revenue_per_completed_order
+FROM {GOLD}.fact_sales_dashboard_channel_daily
+ORDER BY order_date DESC, channel
+LIMIT 10
+""").show()'''),
+            md_cell("""## Zadanie 3 - znajdz data quality issues
 
-Expected output: at least three issue names and counts.
+Find at least THREE data-quality issues directly in
+`gold.fact_sales_dashboard` (not Silver). Hint: a left join does not delete
+orphan references, it turns them into NULLs - check `customer_region` and
+`category` for NULLs in addition to the missing-price/invalid-status/
+future-date checks you already know from Module 2.
+
+**Oczekiwany wynik (rubric):**
+- at least 3 distinct `issue_type` rows with `issue_count > 0` for at least
+  some of them (a generated dataset should reproduce the seeded bad-data-lab
+  problems),
+- a second query returns concrete example rows (not just counts) for at
+  least one issue type,
+- minimum success: every issue type you list is checked against
+  `gold.fact_sales_dashboard`, with an explanation of what it means at the
+  Gold layer (not just "this is a Silver bug").
 """),
-            code_cell('''# TODO: find data-quality issues.
+            code_cell('''# TODO: count at least 3 data-quality issue types against gold.fact_sales_dashboard.
+# Include at least one check that did NOT appear in Module 2's silver-level DQ score
+# (e.g. null customer_region or null category after the join).
 spark.sql(f"""
 SELECT status, COUNT(*) AS rows
 FROM {GOLD}.fact_sales_dashboard
 GROUP BY status
 ORDER BY rows DESC
 """).show()'''),
-            md_cell("""## Task 4 - reconcile detail with aggregate
-
-Expected output: revenue difference should be zero or close to zero.
-"""),
-            code_cell('''# TODO: compare detail revenue with monthly aggregate revenue.
+            code_cell('''# TODO: pull concrete example rows for at least one issue type found above.
 spark.sql(f"""
-SELECT 'TODO' AS check_name, 0 AS diff
-""").show()'''),
-            md_cell("""## Task 5 - decision log
+SELECT line_id, order_id, order_date, status, customer_region, category, unit_price
+FROM {GOLD}.fact_sales_dashboard
+LIMIT 20
+""").show(truncate=False)'''),
+            md_cell("""## Zadanie 4 - zrob reconciliation
 
-Fill this in:
+Compare your `gold.fact_sales_dashboard_channel_daily` (Task 1), rolled up to
+month + channel, against `gold.fact_sales_dashboard_monthly` (Module 2),
+also rolled up to month + channel. Revenue must match for every
+(year_month, channel) pair.
 
-| Decision | Your answer |
-|---|---|
-| Reporting source | |
-| Why not Silver? | |
-| Import vs DirectQuery default | |
-| Accepted caveats | |
-| Owner | |
+**Oczekiwany wynik (rubric):**
+- a result set with `daily_rollup_revenue`, `monthly_table_revenue` and
+  `diff` columns,
+- `diff` is 0 or within rounding tolerance (< 0.01) for every row,
+- minimum success: if `diff` is NOT close to zero, you can name the reason
+  (different filter, different grain, double-counted join) rather than
+  ignoring the mismatch.
 """),
-            md_cell("""## Bonus
+            code_cell('''# TODO: roll up gold.fact_sales_dashboard_channel_daily to (year_month, channel)
+# and compare revenue against gold.fact_sales_dashboard_monthly rolled up the same way.
+spark.sql(f"""
+SELECT 'TODO' AS year_month, 'TODO' AS channel, 0.0 AS daily_rollup_revenue, 0.0 AS monthly_table_revenue, 0.0 AS diff
+""").show()'''),
+            md_cell("""## Zadanie 5 - wypelnij decision log
 
-- add one more quality rule,
-- add `segment` to the monthly aggregate,
-- write a comment for the certified Gold object,
-- prepare a one-minute explanation for a business stakeholder.
+Fill a real row of `docs/templates/decision-log.md` for the table-vs-view
+choice you made in Task 1. Write it as if a teammate will read it in six
+months with no other context.
+
+**Oczekiwany wynik (rubric):**
+- every column filled (Date, Decision, Options considered, Chosen option,
+  Reason, Consequence) - no blanks,
+- "Reason" references a concrete tradeoff (cost, freshness, refresh
+  orchestration), not just "it seemed best",
+- minimum success: "Consequence" names at least one thing that becomes true
+  *because* of the choice (e.g. "needs a scheduled job").
+
+| Date | Decision | Options considered | Chosen option | Reason | Consequence |
+|---|---|---|---|---|---|
+| TODO | TODO | TODO | TODO | TODO | TODO |
+"""),
+            md_cell("""## Bonus (dla szybszych grup)
+
+- add `segment` as a third grouping column to your Task 1 table and re-check
+  the Task 4 reconciliation still holds,
+- write a `COMMENT ON COLUMN` for `revenue` on your new table,
+- prepare a one-minute explanation of your Task 3 findings for a business
+  stakeholder who has never heard the term "orphan reference".
 """),
         ])
     write_notebook(ROOT / f"workshops/w1_gold_kpi_{title}.ipynb", cells)
