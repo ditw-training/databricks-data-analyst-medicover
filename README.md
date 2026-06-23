@@ -18,12 +18,13 @@ Before the course, the trainer runs:
 During the course, participants use the notebooks in this order:
 
 1. `setup/00_setup.ipynb`
-2. `notebooks/demo/day1_01_lakehouse_sql_gold.ipynb`
-3. `notebooks/demo/day1_02_gold_modeling_for_powerbi.ipynb`
-4. `notebooks/workshops/w1_gold_kpi_exercise.ipynb`
-5. `notebooks/demo/day2_01_powerbi_semantic_model.ipynb`
-6. `notebooks/demo/day2_02_performance_automation_cicd.ipynb`
-7. `notebooks/workshops/w2_powerbi_dataset_exercise.ipynb`
+2. `notebooks/demo/day1_01_sql_warehouse_analyst_tooling.ipynb`
+3. `notebooks/demo/day1_02_lakehouse_delta_gold.ipynb`
+4. `notebooks/demo/day1_03_gold_modeling_for_powerbi.ipynb`
+5. `notebooks/workshops/w1_gold_kpi_exercise.ipynb`
+6. `notebooks/demo/day2_01_powerbi_semantic_model.ipynb`
+7. `notebooks/demo/day2_02_performance_automation_cicd.ipynb`
+8. `notebooks/workshops/w2_powerbi_dataset_exercise.ipynb`
 
 `data/generate_training_dataset.ipynb` can also be run manually for a single
 catalog if a participant environment must be rebuilt.

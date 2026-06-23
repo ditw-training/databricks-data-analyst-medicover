@@ -24,13 +24,19 @@ resources:
       tasks:
         - task_key: validate_sources
           notebook_task:
-            notebook_path: ../notebooks/demo/day1_01_lakehouse_sql_gold.ipynb
+            notebook_path: ../notebooks/demo/day1_01_sql_warehouse_analyst_tooling.ipynb
             source: WORKSPACE
-        - task_key: refresh_gold
+        - task_key: build_gold
           depends_on:
             - task_key: validate_sources
           notebook_task:
-            notebook_path: ../notebooks/demo/day1_02_gold_modeling_for_powerbi.ipynb
+            notebook_path: ../notebooks/demo/day1_02_lakehouse_delta_gold.ipynb
+            source: WORKSPACE
+        - task_key: refresh_gold
+          depends_on:
+            - task_key: build_gold
+          notebook_task:
+            notebook_path: ../notebooks/demo/day1_03_gold_modeling_for_powerbi.ipynb
             source: WORKSPACE
         - task_key: refresh_incremental_view
           depends_on:
