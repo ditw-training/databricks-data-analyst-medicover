@@ -1,8 +1,58 @@
+# OS / editor
 .DS_Store
-__pycache__/
-*.pyc
-.venv/
-.ipynb_checkpoints/
+Thumbs.db
+**/.gitkeep
 ~$*.pptx
 *.tmp
+*.log
 
+# Local Python / notebook runtime
+.venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+**/.ipynb_checkpoints/
+.pytest_cache/
+.mypy_cache/
+
+# Databricks local artifacts
+.bundle/
+.databricks/
+*.dbc
+
+# Local build/source materials not required for notebook testing
+scripts/
+presentation/
+tools/
+notebooks/_old/
+notebooks/*.ipynb
+/workshops/
+data/source_csv/
+
+# Planning, build notes and prompt drafts are local-only.
+# Keep only docs/templates because active notebooks reference them.
+docs/*
+!docs/templates/
+!docs/templates/**
+
+# Keep only images used by active demo/workshop notebooks.
+assets/images/*
+!assets/images/architecture_patterns_to_powerbi.png
+!assets/images/dabs_deployment_flow.png
+!assets/images/gold_business_value.png
+!assets/images/gold_quality_gate.png
+!assets/images/import_vs_directquery.png
+!assets/images/incremental_refresh_range.png
+!assets/images/kimball_gold_model.png
+!assets/images/kpi_definition_flow.png
+!assets/images/lakeflow_job_dag.png
+!assets/images/medallion_to_powerbi.png
+!assets/images/powerbi_connection_walkthrough.png
+!assets/images/powerbi_report_mockup.png
+!assets/images/query_profile_reading_map.png
+!assets/images/retailhub_source_map.png
+!assets/images/source_catalog_explorer_lineage.png
+!assets/images/source_sql_editor.png
+!assets/images/sql_warehouse_cost_decision.png
+!assets/images/star_schema_vs_flat_table.png
+!assets/images/workshop_success_criteria.png

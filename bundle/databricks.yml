@@ -1,7 +1,7 @@
 # Reference DABs / Declarative Automation Bundles example.
 # Validate against the current Databricks CLI/docs before live use.
 # This file has NOT been deployed or run against a live workspace - see
-# Module 4 (notebooks/m4_performance_automation_cicd_orientation.ipynb) for
+# Day 2 notebook (notebooks/demo/day2_02_performance_automation_cicd.ipynb) for
 # the `databricks bundle validate` instructions and the orientation-level
 # scope note.
 
@@ -24,25 +24,25 @@ resources:
       tasks:
         - task_key: validate_sources
           notebook_task:
-            notebook_path: ../notebooks/m1_sql_warehouse_notebooks.ipynb
+            notebook_path: ../notebooks/demo/day1_01_lakehouse_sql_gold.ipynb
             source: WORKSPACE
         - task_key: refresh_gold
           depends_on:
             - task_key: validate_sources
           notebook_task:
-            notebook_path: ../notebooks/m2_gold_kpi_best_practices.ipynb
+            notebook_path: ../notebooks/demo/day1_02_gold_modeling_for_powerbi.ipynb
             source: WORKSPACE
         - task_key: refresh_incremental_view
           depends_on:
             - task_key: refresh_gold
           notebook_task:
-            notebook_path: ../notebooks/m3_powerbi_semantic_dataset.ipynb
+            notebook_path: ../notebooks/demo/day2_01_powerbi_semantic_model.ipynb
             source: WORKSPACE
         - task_key: validate_bi_readiness
           depends_on:
             - task_key: refresh_incremental_view
           notebook_task:
-            notebook_path: ../notebooks/m4_performance_automation_cicd_orientation.ipynb
+            notebook_path: ../notebooks/demo/day2_02_performance_automation_cicd.ipynb
             source: WORKSPACE
 
 targets:

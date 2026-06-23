@@ -1,40 +1,36 @@
-# Databricks Data Analyst Medi
+# Databricks Data Analyst Medicover
 
-Roboczy projekt szkolenia bazujacego na `Databricks-Data-Analyst`, ale
-budowanego jako osobny produkt w folderze `Databricks-Data-Analyst-Medi`.
+Repository for testing the Databricks Data Analyst Medicover training
+notebooks.
 
-## Status
+## Run Order
 
-Etap 1: analiza agendy i struktura szkolenia.
+Use the notebooks in this order:
 
-Na tym etapie nie kopiujemy jeszcze pelnej zawartosci kursu zrodlowego. Tworzymy
-docelowy uklad katalogow, decyzje zakresowe i mape agendy na materialy, zeby
-kolejne kroki byly jednoznaczne.
+1. `setup/00_pre_config.ipynb`
+2. `setup/00_setup.ipynb`
+3. `data/generate_training_dataset.ipynb`
+4. `notebooks/demo/day1_01_lakehouse_sql_gold.ipynb`
+5. `notebooks/demo/day1_02_gold_modeling_for_powerbi.ipynb`
+6. `notebooks/workshops/w1_gold_kpi_exercise.ipynb`
+7. `notebooks/demo/day2_01_powerbi_semantic_model.ipynb`
+8. `notebooks/demo/day2_02_performance_automation_cicd.ipynb`
+9. `notebooks/workshops/w2_powerbi_dataset_exercise.ipynb`
 
-## Katalogi
+Solution notebooks are available in `notebooks/workshops/` for trainer
+validation.
+
+## Included For Testing
 
 ```text
-Databricks-Data-Analyst-Medi/
-├── docs/             # agenda, analiza, plan budowy, przewodnik trenera
-├── setup/            # notebooki przygotowania srodowiska
-├── data/             # generator danych i pliki zrodlowe
-├── notebooks/        # notebooki modulowe
-├── workshops/        # cwiczenia i rozwiazania
-├── presentation/     # prezentacje pptx
-├── scripts/          # generatory notebookow, warsztatow i prezentacji
-├── tools/            # wspolne narzedzia pomocnicze
-└── assets/           # obrazy i materialy graficzne
+assets/images/      Visuals referenced by active notebooks
+bundle/             Databricks Asset Bundle definition
+data/               Dataset generator notebook
+docs/templates/     BI handoff templates referenced by exercises
+notebooks/demo/     Demo notebooks
+notebooks/workshops Workshop notebooks and solutions
+setup/              Workspace setup notebooks
 ```
 
-## Dokumenty startowe
-
-- `docs/agenda-source.md` - agenda zrodlowa.
-- `docs/00-agenda-analysis.md` - interpretacja agendy i decyzje zakresowe.
-- `docs/01-training-structure.md` - docelowa struktura materialow.
-- `docs/02-master-training-plan.md` - glowny plan produktu szkoleniowego.
-- `docs/03-source-material-map.md` - mapa lokalnych i oficjalnych zrodel.
-- `docs/04-pre-implementation-analysis.md` - ostatnie decyzje przed budowa.
-- `docs/05-implementation-report.md` - raport z pierwszej implementacji.
-- `docs/06-notebook-review-and-expansion-tasks.md` - przeglad notebookow i backlog rozbudowy.
-- `docs/TRAINER_GUIDE.md` - robocze notatki dla prowadzacego.
-- `docs/build-log.md` - dziennik decyzji i weryfikacji.
+Local build scripts, old notebooks, planning notes and presentation drafts are
+ignored because they are not required to test the notebook run path.
