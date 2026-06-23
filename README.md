@@ -3,19 +3,30 @@
 Repository for testing the Databricks Data Analyst Medicover training
 notebooks.
 
-## Run Order
+## Trainer Run Order
 
-Use the notebooks in this order:
+Before the course, the trainer runs:
 
 1. `setup/00_pre_config.ipynb`
-2. `setup/00_setup.ipynb`
-3. `data/generate_training_dataset.ipynb`
-4. `notebooks/demo/day1_01_lakehouse_sql_gold.ipynb`
-5. `notebooks/demo/day1_02_gold_modeling_for_powerbi.ipynb`
-6. `notebooks/workshops/w1_gold_kpi_exercise.ipynb`
-7. `notebooks/demo/day2_01_powerbi_semantic_model.ipynb`
-8. `notebooks/demo/day2_02_performance_automation_cicd.ipynb`
-9. `notebooks/workshops/w2_powerbi_dataset_exercise.ipynb`
+
+`00_pre_config` creates one isolated catalog per participant and runs
+`data/generate_training_dataset.ipynb` for every catalog by passing
+`TARGET_CATALOG`.
+
+## Participant Run Order
+
+During the course, participants use the notebooks in this order:
+
+1. `setup/00_setup.ipynb`
+2. `notebooks/demo/day1_01_lakehouse_sql_gold.ipynb`
+3. `notebooks/demo/day1_02_gold_modeling_for_powerbi.ipynb`
+4. `notebooks/workshops/w1_gold_kpi_exercise.ipynb`
+5. `notebooks/demo/day2_01_powerbi_semantic_model.ipynb`
+6. `notebooks/demo/day2_02_performance_automation_cicd.ipynb`
+7. `notebooks/workshops/w2_powerbi_dataset_exercise.ipynb`
+
+`data/generate_training_dataset.ipynb` can also be run manually for a single
+catalog if a participant environment must be rebuilt.
 
 Solution notebooks are available in `notebooks/workshops/` for trainer
 validation.
@@ -30,9 +41,9 @@ Setup resolves the Unity Catalog name from the Databricks user:
 Trainer mode is used when the Databricks user contains `trainer` or `trener`,
 or when the user is `krzysztof.burejza`.
 
-`setup/00_pre_config.ipynb` creates the catalog with `MANAGED LOCATION`.
-Before running it, verify `STORAGE_LOCATION` in that notebook for the target
-workspace storage account/container.
+`setup/00_pre_config.ipynb` creates catalogs with `MANAGED LOCATION`. Before
+running it, verify `TRAINING_GROUP` or `TRAINING_USERS`, and verify
+`STORAGE_LOCATION` for the target workspace storage account/container.
 
 ## Included For Testing
 
