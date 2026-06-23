@@ -74,13 +74,13 @@ po decyzji wlasciciela materialow.
 
 ## Zasady budowy
 
-- Materialy w notebookach po polsku. **AKTUALIZACJA (po Block 8/9, patrz
-  `docs/TRAINER_GUIDE.md` sekcja "Format"):** w praktyce tresc notebookow
-  (markdown + komentarze SQL/Python) zostala zbudowana po angielsku, zgodnie
-  z konwencja branzowa dla kodu; jezykiem prowadzenia szkolenia i wszystkich
-  dokumentow planistycznych/trenerskich pozostaje polski. To retroaktywna
-  zmiana decyzji z tego wiersza, udokumentowana dopiero w Block 8 — pierwotna
-  decyzja "po polsku" nigdy nie zostala zrealizowana w notebookach Block 1-9.
+- **Jezyk notebookow: angielski** (decyzja wlasciciela, 2026-06-23 — zatwierdza
+  faktyczny stan po Block 1-9). Tresc notebookow (markdown + komentarze
+  SQL/Python) jest po angielsku, zgodnie z konwencja branzowa dla kodu.
+  Jezykiem prowadzenia szkolenia oraz wszystkich dokumentow
+  planistycznych/trenerskich (`docs/*.md`) pozostaje polski. Pierwotny zapis
+  "po polsku" w tym wierszu byl bledny od Block 1 i zostal formalnie
+  skorygowany, nie jest juz traktowany jako odstepstwo wymagajace naprawy.
 - Nazwy plikow po angielsku, spojne z kursem bazowym.
 - Kazdy modul ma czesc podstawowa oraz opcjonalna sekcje bonusowa.
 - Warsztaty maja osobny notebook `exercise` i `solution`.
