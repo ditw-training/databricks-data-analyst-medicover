@@ -20,6 +20,16 @@ Use the notebooks in this order:
 Solution notebooks are available in `notebooks/workshops/` for trainer
 validation.
 
+## Catalog Naming
+
+Setup resolves the Unity Catalog name from the Databricks user:
+
+- regular users: `retailhub_<user_name>`, for example `retailhub_jan_kowalski`
+- trainer users: `retailhub_trainer`
+
+Trainer mode is used when the Databricks user contains `trainer` or `trener`,
+or when the user is `krzysztof.burejza`.
+
 ## Included For Testing
 
 ```text

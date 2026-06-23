@@ -11,7 +11,7 @@ bundle:
 variables:
   catalog:
     description: Target Unity Catalog catalog
-    default: training_dbx_ana_medi_trainer
+    default: retailhub_trainer
 
 resources:
   jobs:
@@ -50,8 +50,8 @@ targets:
     mode: development
     default: true
     variables:
-      catalog: training_dbx_ana_medi_dev
+      catalog: retailhub_dev
   prod:
     mode: production
     variables:
-      catalog: training_dbx_ana_medi_prod
+      catalog: retailhub_prod
