@@ -602,3 +602,72 @@ regresji. Pelny sweep `nbformat.validate` + `ast.parse` po wszystkich
 code cellach we wszystkich 11 notebookach repo: PASS, 0 bledow kompilacji.
 
 Hash commitu: patrz `git log -1 --oneline` po commicie tego bloku.
+
+## Medi Block 7 — Module 1 expansion (+ Workshop 2 filename fix)
+
+Kontynuacja przerwanej w trakcie edycji probki: `notebook_module_1()` w
+`scripts/build_materials_v1.py` zawieral juz spojna, kompletna implementacje
+zadan M1-01..M1-04 (305 linii diffu, syntaktycznie poprawny working tree).
+Ocena: jakosc dobra, tresc kompletna - zdecydowano dopracowac/scalic kilka
+komorek zamiast przepisywac od zera. Wynik: 26 -> 23 komorki (po scaleniu
+"Real Databricks UI context" + "SQL Editor or notebook" w jedna komorke, oraz
+"RetailHub source map" + "Business question" w jedna, oraz "UI workflow" +
+"Task: warehouse settings" w jedna) - blisko docelowego zakresu 18-22.
+
+Pokryte zadania:
+- M1-01: tabela decyzyjna Serverless/Pro/Classic, trainer-led UI workflow
+  (4 zakladki: Overview, Edit, Monitoring/Query History, Connection details),
+  zadanie "warehouse settings dla Import vs DirectQuery demo" (forward-ref
+  Module 3).
+- M1-02: `SHOW TABLES`, `DESCRIBE DETAIL`, `DESCRIBE HISTORY` na
+  `silver.order_lines`; profiling (status distribution, min/max/nulls) na
+  `silver.sales_orders`/`silver.order_lines`; date-filtered vs unfiltered
+  query comparison (lekka wersja, Module 4 robi deep dive).
+- M1-03: data map (tabela grain/business use/risk), candidate KPI
+  (grain/risk/silver-vs-gold), 3 pytania do business stakeholdera.
+- M1-04: mini-quiz (SQL Editor vs notebook, Import vs DirectQuery -
+  forward-reference only, kiedy zapytac o definicje KPI) - dyskusja, nie
+  ocenione.
+
+Dodatkowo naprawiono blad w `notebook_workshop_2()`: precheck_cell dla
+Workshop 2 mial bledna nazwe pliku w komunikacie bledu
+(`m2_gold_dashboard.ipynb` zamiast `m2_gold_kpi_best_practices.ipynb`).
+
+### Weryfikacja (raw output)
+
+```
+$ .venv/bin/python scripts/build_materials_v1.py
+Built Databricks-Data-Analyst-Medi v1 materials
+
+$ .venv/bin/python -c "..."  # nbformat.validate + cell count
+nbformat valid: notebooks/m1_sql_warehouse_notebooks.ipynb
+new cell count: 23
+code cells checked: 10 errors: 0
+```
+
+Stary->nowy cell count: 20 -> 23.
+
+Grep proof (wystapienia w tresci notebooka m1):
+DESCRIBE DETAIL -> 2, DESCRIBE HISTORY -> 2, data map -> 5,
+business stakeholder -> 4, mini-quiz -> 1, Module 2 -> 6, Module 3 -> 9,
+Module 4 -> 5, three questions -> 1, Step 3 -> 1. `precheck_cell(` w
+`notebook_module_1()` -> 1 wystapienie.
+
+Workshop 2 filename fix: `grep -l "m2_gold_dashboard.ipynb"
+workshops/*.ipynb notebooks/*.ipynb` -> brak wynikow (0). `grep -l
+"m2_gold_kpi_best_practices.ipynb" workshops/w2_powerbi_dataset_*.ipynb`
+-> oba pliki potwierdzone.
+
+Pelny sweep 11 notebookow (`git diff --stat` + linia-po-linii z `grep -v
+'"id":'`): tylko `m1_sql_warehouse_notebooks.ipynb` ma realne zmiany tresci
+(290 insercji/135 delecji - oczekiwane, to jest cel bloku). Pozostale 8
+notebookow (`w1_gold_kpi_exercise/solution`, `00_pre_config`, `00_setup`,
+`generate_training_dataset`, `m2_gold_kpi_best_practices`,
+`m4_performance_automation_cicd_orientation`, `m3_powerbi_semantic_dataset`):
+0 niezerowych linii diff poza `"id"` - zero regresji. 2 pliki Workshop 2
+(`w2_powerbi_dataset_exercise/solution`) maja dokladnie 4 linie zmian kazdy
+- wylacznie zamiana `m2_gold_dashboard.ipynb` ->
+`m2_gold_kpi_best_practices.ipynb` w komunikatach precheck_cell, zgodnie z
+zamierzona naprawa.
+
+Hash commitu: patrz `git log -1 --oneline` po commicie tego bloku.

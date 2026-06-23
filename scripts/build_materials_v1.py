@@ -1487,10 +1487,40 @@ def notebook_module_1() -> None:
 
 ![SQL Warehouse cost decision](../assets/images/sql_warehouse_cost_decision.png)
 
-This module starts the RetailHub case. The goal is not only to run SQL, but to
-understand which warehouse and Power BI mode will be cost-safe for the report.
+This module opens the RetailHub case end to end. RetailHub wants an
+**Executive KPI Dashboard** in Power BI, built on top of Databricks. The goal
+here is not only to run SQL - it is to start making the same decisions a real
+analytics engineer makes before writing a single Gold table:
+
+- Which compute (SQL Warehouse) should serve this work, and at what cost?
+- What does the source data actually look like, and can it be trusted yet?
+- What is the grain of each table, and what KPI risks does that imply?
+- What questions does the business stakeholder still owe us an answer to?
+
+Everything you sketch here - the data map, the risk list, the warehouse
+decision - will be revisited with real artifacts in later modules: Module 2
+builds the Gold model and a KPI dictionary, Module 3 connects Power BI with
+an explicit Import/DirectQuery decision, Module 4 tunes performance and
+automates the pipeline.
 """),
         code_cell("""%run ../setup/00_setup"""),
+        md_cell("""## Runtime pre-check
+
+Reuses the standardized `precheck_cell` helper. It checks that the Silver and
+Gold starter objects from the generator already exist, and stops with a clear
+message if they do not, instead of failing later with a confusing
+`TABLE_OR_VIEW_NOT_FOUND`.
+"""),
+        precheck_cell(
+            [
+                "{SILVER}.customers",
+                "{SILVER}.products",
+                "{SILVER}.sales_orders",
+                "{SILVER}.order_lines",
+                "{GOLD}.fact_sales",
+            ],
+            "data/generate_training_dataset.ipynb",
+        ),
         md_cell("""## Real Databricks UI context
 
 Use the source screenshots below as short visual anchors before the hands-on
@@ -1499,12 +1529,35 @@ part. They come from the base `Databricks-Data-Analyst` training.
 ![Databricks SQL Editor](../assets/images/source_sql_editor.png)
 
 ![Catalog Explorer hierarchy](../assets/images/source_catalog_explorer_hierarchy.png)
+
+![Catalog Explorer lineage](../assets/images/source_catalog_explorer_lineage.png)
+
+### M1-04 (part 1): SQL Editor or notebook - a first decision
+
+This is the first of three quick decisions this module asks you to make
+explicitly, instead of leaving it implicit. We will revisit the other two
+below.
+
+| Situation | Use SQL Editor | Use a notebook |
+|---|---|---|
+| One-off ad-hoc query, sharing a result link with a colleague | yes | also possible, but heavier |
+| Building a reusable, parameterized pipeline step | no | yes |
+| Mixing SQL with Python control flow (pre-checks, loops, profiling helpers) | no | yes |
+| Quick exploration while talking to a business stakeholder | yes | only if already open |
+| Anything that will be scheduled as a Job task | rarely | yes (or a SQL file task) |
+
+Discussion prompt: this module itself is a notebook, mixing markdown,
+profiling SQL and Python pre-checks. Why does that combination make sense
+for a *training* artifact specifically, even though a working analyst would
+do plenty of this same exploration directly in the SQL Editor?
 """),
-        md_cell("""## RetailHub source map
+        md_cell("""## RetailHub source map and business question
+
+This is the visual anchor for the business discovery exercise below. Look at
+it before filling the data map - it shows how Bronze/Silver source tables
+relate to each other before any Gold modelling happens.
 
 ![RetailHub source map](../assets/images/retailhub_source_map.png)
-"""),
-        md_cell("""## Business question
 
 RetailHub wants an executive KPI dashboard. Before building Gold tables, we
 need to answer:
@@ -1513,66 +1566,32 @@ need to answer:
 - What is the grain?
 - Which columns drive filters and joins?
 - What can make the report expensive?
+
+This module answers the first two with hands-on SQL. The last two carry
+forward into Module 2 (Gold grain and KPI dictionary) and Module 3 (what
+makes a Power BI page expensive).
 """),
-        md_cell("""## Runtime pre-check
-
-If this fails, run:
-
-1. `setup/00_pre_config.ipynb`
-2. `data/generate_training_dataset.ipynb`
-"""),
-        code_cell("""required_tables = [
-    f"{SILVER}.customers",
-    f"{SILVER}.products",
-    f"{SILVER}.sales_orders",
-    f"{SILVER}.order_lines",
-    f"{GOLD}.fact_sales",
-]
-
-missing = [table for table in required_tables if not spark.catalog.tableExists(table)]
-if missing:
-    raise Exception("Missing tables. Run setup and dataset generator first: " + ", ".join(missing))
-
-print("[OK] Required tables exist")"""),
         code_cell("""spark.sql(f"SHOW TABLES IN {SILVER}").show(truncate=False)
 spark.sql(f"SHOW TABLES IN {GOLD}").show(truncate=False)"""),
-        code_cell('''spark.sql(f"""
-SELECT 'customers' AS table_name, COUNT(*) AS rows FROM {SILVER}.customers
-UNION ALL SELECT 'products', COUNT(*) FROM {SILVER}.products
-UNION ALL SELECT 'sales_orders', COUNT(*) FROM {SILVER}.sales_orders
-UNION ALL SELECT 'order_lines', COUNT(*) FROM {SILVER}.order_lines
-""").show()'''),
-        md_cell("""## Pricing and cost discussion
+        md_cell("""## M1-02: table metadata - `DESCRIBE DETAIL` and `DESCRIBE HISTORY`
 
-Use the official Databricks pricing page or calculator during delivery. Do not
-treat values copied into training materials as permanent.
-
-Trainer asset to refresh before delivery:
-
-`assets/images/databricks_pricing_YYYY-MM-DD.png`
-
-Decision questions:
-
-- Is Import mode enough for the report?
-- Which pages need live data?
-- Does DirectQuery query Silver or Gold?
-- What auto-stop is acceptable for a live demo?
+Before profiling rows, check what Databricks already knows about each table:
+storage format, size, and the operation history (every write, including the
+generator run that created it). This is a light, introductory look - Module 4
+returns to performance-relevant metadata (Query Profile, `EXPLAIN FORMATTED`)
+in much more depth once there is a realistic Gold workload to optimize.
 """),
-        md_cell("""## Warehouse sizing discussion
+        code_cell('''spark.sql(f"DESCRIBE DETAIL {SILVER}.order_lines").show(truncate=False)'''),
+        code_cell('''spark.sql(f"DESCRIBE HISTORY {SILVER}.order_lines").select(
+    "version", "timestamp", "operation", "operationParameters"
+).show(truncate=False)'''),
+        md_cell("""## Data profiling
 
-Use this as a guided conversation, not as a static pricing lecture.
-
-| Scenario | Candidate mode | Cost risk | Mitigation |
-|---|---|---|---|
-| Daily executive dashboard | Import | refresh window too wide | incremental refresh, monthly aggregate |
-| Operational live page | DirectQuery | every slicer interaction sends SQL | Gold aggregate, fewer visuals, query profile |
-| Ad-hoc analyst exploration | SQL Editor / Notebook | large scans | filters, sample first, select needed columns |
-| Training demo | Serverless SQL Warehouse | idle time | short auto-stop, prepared objects |
-
-Before delivery, refresh the current official pricing screenshot and place it
-as `assets/images/databricks_pricing_YYYY-MM-DD.png`.
+`silver.sales_orders` and `silver.order_lines` are the two tables every later
+Gold object derives from. Profile them now: status distribution, date range,
+nulls and revenue/cost shape. Keep the results - you will compare them
+mentally to the Gold quality gate built in Module 2.
 """),
-        md_cell("""## Data profiling"""),
         code_cell('''spark.sql(f"""
 SELECT
   status,
@@ -1587,34 +1606,34 @@ SELECT
   MAX(order_date) AS max_order_date,
   COUNT(*) AS rows,
   COUNT(DISTINCT order_id) AS orders,
-  COUNT(DISTINCT product_id) AS products
+  COUNT(DISTINCT product_id) AS products,
+  SUM(CASE WHEN unit_price IS NULL THEN 1 ELSE 0 END) AS null_unit_price,
+  SUM(CASE WHEN unit_cost IS NULL THEN 1 ELSE 0 END) AS null_unit_cost
+FROM {SILVER}.order_lines
+""").show()'''),
+        md_cell("""### Date filter vs no date filter
+
+Run the same aggregate twice: once unfiltered, once restricted to the last 90
+days. Compare the row counts and the result, not (yet) the execution plan -
+Module 4 is where you read `EXPLAIN FORMATTED` and Query Profile to see *why*
+a date filter changes the amount of data scanned, not just *that* it changes
+the result.
+"""),
+        code_cell('''spark.sql(f"""
+SELECT COUNT(*) AS rows, ROUND(SUM(line_revenue), 2) AS line_revenue
 FROM {SILVER}.order_lines
 """).show()'''),
         code_cell('''spark.sql(f"""
-SELECT
-  channel,
-  region,
-  COUNT(DISTINCT order_id) AS orders,
-  ROUND(SUM(line_revenue), 2) AS line_revenue
-FROM {SILVER}.order_lines
-GROUP BY channel, region
-ORDER BY line_revenue DESC
-""").show(truncate=False)'''),
-        code_cell('''spark.sql(f"""
-SELECT
-  category,
-  COUNT(*) AS lines,
-  COUNT(DISTINCT product_id) AS products,
-  ROUND(AVG(unit_price), 2) AS avg_price,
-  ROUND(AVG(unit_cost), 2) AS avg_cost
-FROM {SILVER}.order_lines
-GROUP BY category
-ORDER BY lines DESC
-""").show(truncate=False)'''),
+SELECT COUNT(*) AS rows, ROUND(SUM(line_revenue), 2) AS line_revenue
+FROM {SILVER}.order_lines l
+JOIN {SILVER}.sales_orders o ON o.order_id = l.order_id
+WHERE o.order_date >= date_sub(current_date(), 90)
+""").show()'''),
         md_cell("""## First risk scan
 
 This is the moment to show why Gold exists. The source is usable, but not yet a
-trusted BI contract.
+trusted BI contract. Module 2 turns this kind of scan into a formal,
+weighted **data quality score**; for now, just see that the issues exist.
 """),
         code_cell('''spark.sql(f"""
 SELECT 'invalid_status' AS issue, COUNT(*) AS rows FROM {SILVER}.sales_orders
@@ -1628,29 +1647,135 @@ WHERE unit_price IS NULL
 UNION ALL
 SELECT 'duplicate_line_ids', COUNT(*) - COUNT(DISTINCT line_id) FROM {SILVER}.order_lines
 """).show(truncate=False)'''),
-        md_cell("""## Artifact: first data map
+        md_cell("""## M1-03: business discovery exercise
 
-Fill this in during the session:
+Fill in the data map yourself, using the source map above and the profiling
+output as evidence - do not just copy this table, it is a starting template.
 
-| Object | Grain | Business use | Risk |
+### Step 1 - data map
+
+| Object | Grain (one row per...) | Business use | Risk |
 |---|---|---|---|
+| `silver.customers` | ? | ? | ? |
+| `silver.products` | ? | ? | ? |
 | `silver.sales_orders` | one row per order | status, date, customer | status definitions |
 | `silver.order_lines` | one row per order line | revenue, margin, quantity | missing prices, duplicates |
-| `gold.fact_sales` | one row per order line | BI fact | must be validated |
+| `gold.fact_sales` | ? | ? | must be validated |
+
+### Step 2 - pick one candidate KPI (e.g. "Net Revenue" or "Return Rate")
+
+- What table(s) and grain does it need?
+- What could silently break it (duplicate lines? cancelled orders counted?)?
+- Is this KPI safe to compute from `silver.order_lines` directly, or does it
+  need a Gold fact built specifically for reporting?
+
+### Step 3 - three questions for the business stakeholder
+
+Write down 3 concrete questions you would ask the RetailHub business owner
+before finalizing this KPI's definition (example shape, not the answer):
+"Does a Returned order count as negative revenue or as excluded?", "..." ,
+"...". Module 2's KPI dictionary exercise will ask you to actually answer
+questions like these in SQL.
 """),
-        md_cell("""## Mini exercise: warehouse decision
+        md_cell("""## M1-01: warehouse decision - Serverless, Pro, Classic
 
-In pairs, decide the baseline for the executive dashboard:
+Use this as a guided conversation, not as a static pricing lecture. Use the
+official Databricks pricing page or calculator live during delivery - do not
+treat numbers copied into training materials as permanent. Trainer asset to
+refresh before delivery: `assets/images/databricks_pricing_YYYY-MM-DD.png`.
 
-| Decision | Your answer |
-|---|---|
-| Import or DirectQuery by default? | |
-| Which Gold object should feed summary pages? | |
-| What warehouse auto-stop would you use for a live demo? | |
-| Which query should never be executed by a Power BI visual? | |
+| Warehouse type | Startup time | Cost model | When to choose it |
+|---|---|---|---|
+| Serverless | seconds | pay per query, Databricks-managed compute | training demos, bursty ad-hoc usage, fastest time-to-first-query |
+| Pro | ~1-3 min cold | per-DBU, customer cloud infra, more SQL features (e.g. predictive I/O) | steady team workloads, production BI with moderate concurrency |
+| Classic | ~1-3 min cold | per-DBU, simplest/cheapest compute tier | cost-sensitive batch SQL, fewer concurrency demands |
 
-Trainer note: this section can easily take 15-20 minutes when participants
-compare cost, freshness and usability trade-offs.
+Decision questions for this RetailHub case:
+
+- Is Import mode enough for the report, or does a page need live data?
+- Does DirectQuery (Module 3) query Silver or Gold - and does that change the
+  warehouse tier you would pick?
+- What auto-stop is acceptable for a live training demo vs a production
+  dashboard?
+"""),
+        md_cell("""## UI workflow: where to find warehouse settings
+
+This is a trainer-led walkthrough in the live Databricks workspace, not a
+notebook cell. Show participants exactly where to click:
+
+1. **SQL Warehouses** (left sidebar) -> select a warehouse -> **Overview**
+   tab shows current size, cluster count and state (running/stopped).
+2. **Edit** (or warehouse creation dialog) shows **Cluster size**
+   (2X-Small...4X-Large), **Auto stop** (minutes of inactivity before the
+   warehouse suspends), and **Scaling** (min/max clusters for concurrency).
+3. **Monitoring** tab on the warehouse shows live and historical
+   **Query History** - every query, its duration, the user, and the SQL text.
+   This is the same Query History that Module 4's Query Profile walkthrough
+   drills into for performance reading.
+4. **Connection details** tab exposes **Server hostname** and **HTTP path** -
+   exactly what Module 3's Power BI connection walkthrough needs to wire up
+   Import or DirectQuery.
+
+Trainer note: physically click through these four tabs live, even briefly -
+participants retain "where do I click" far better from a live demo than from
+a screenshot.
+
+### Task: warehouse settings for the Import vs DirectQuery demo
+
+Module 3 will build both an **Import**-mode connection and a narrow
+**DirectQuery** page against `gold.v_fact_sales_incremental`. Decide now,
+before that module, what warehouse settings you would use for each:
+
+| Setting | Import demo | DirectQuery demo | Why |
+|---|---|---|---|
+| Warehouse size | | | |
+| Auto-stop (minutes) | | | |
+| Warehouse type (Serverless/Pro/Classic) | | | |
+| Acceptable concurrency (participants clicking at once) | | | |
+
+Trainer note: the key insight to draw out is that DirectQuery's cost is
+driven by *interaction volume* (visuals x filter changes x users), which
+argues for a faster-resuming, more responsive warehouse than a batch Import
+refresh needs - this is exactly the cost mechanism Module 3 explains in
+detail with the query fan-out diagram.
+"""),
+        md_cell("""## M1-04: decision mini-quiz (discussion, not graded)
+
+Talk through these three scenario questions as a group. Each one is a
+decision you will see formalized later in the course - the point here is to
+form an intuition first, then check it against the real answer when you get
+there.
+
+1. **Kiedy SQL Editor, kiedy notebook?** - See the table above. What tips the
+   balance for *this specific RetailHub case*: building a one-off filter for
+   a stakeholder vs building the reusable Gold pipeline?
+2. **Kiedy Import, kiedy DirectQuery?** - Don't fully answer this yet; that is
+   Module 3's job, with a full decision table and query fan-out cost model.
+   For now: which RetailHub report page do you *guess* needs to be live, and
+   why?
+3. **Kiedy zapytac o definicje KPI?** - Looking at your Step 2/3 answers
+   above: at what point in a real project is it already too late to ask the
+   business stakeholder what "Return Rate" means - after the SQL is written,
+   after the dashboard ships, or after the first executive meeting using it?
+
+Trainer note: do not resolve question 2 in detail here - resist the urge.
+Let participants sit with an open question; Module 3 pays it off.
+"""),
+        md_cell("""## Where this module is heading
+
+You leave Module 1 with: a profiled source, a first risk list, a data map
+draft, and an open warehouse decision. The rest of the course resolves each
+of these in order:
+
+- **Module 2** turns the risk list into a formal data quality score and
+  builds the Gold model (`gold.fact_sales_dashboard`) plus a KPI dictionary
+  that answers the "what does this KPI actually mean" questions you just
+  wrote down.
+- **Module 3** resolves the Import vs DirectQuery question for real, builds
+  `gold.v_fact_sales_incremental`, and fills in a BI contract.
+- **Module 4** returns to performance (Query Profile, before/after
+  `EXPLAIN FORMATTED`) and automation (Lakeflow Jobs, DABs) using the Gold
+  objects built along the way.
 """),
     ]
     write_notebook(ROOT / "notebooks/m1_sql_warehouse_notebooks.ipynb", cells)
@@ -3325,7 +3450,7 @@ names exactly which module to run.
                 "{GOLD}.fact_sales_dashboard_monthly",
                 "{GOLD}.v_fact_sales_incremental",
             ],
-            "notebooks/m2_gold_dashboard.ipynb (for fact_sales_dashboard_monthly) "
+            "notebooks/m2_gold_kpi_best_practices.ipynb (for fact_sales_dashboard_monthly) "
             "and notebooks/m3_powerbi_semantic_dataset.ipynb (for v_fact_sales_incremental)",
         ),
         md_cell("""## Tasks
