@@ -671,3 +671,101 @@ notebookow (`w1_gold_kpi_exercise/solution`, `00_pre_config`, `00_setup`,
 zamierzona naprawa.
 
 Hash commitu: patrz `git log -1 --oneline` po commicie tego bloku.
+
+## Medi Block 8 — Global tasks (GLOBAL-02, GLOBAL-03, GLOBAL-04)
+
+Zakres: `docs/06-notebook-review-and-expansion-tasks.md` sekcja 6, taski
+GLOBAL-02..04 (GLOBAL-01 zrobiony w Block 1, GLOBAL-05 to standing
+discipline, juz przestrzegana we wszystkich blokach 1-7).
+
+**GLOBAL-02 — `docs/TRAINER_GUIDE.md` przepisany od zera** (nie dopisany).
+Nowa struktura: Format, Przebieg sesji, tabela moduł -> plik -> target
+backlogu -> faktyczna liczba komorek (9 wierszy, target z
+`docs/06-notebook-review-and-expansion-tasks.md` sekcja 5 vs faktyczny
+cell count zweryfikowany lokalnie), pelny lancuch zaleznosci
+(`setup/00_pre_config -> generator -> m1 -> m2 -> {w1, m3 -> w2} -> m4`,
+z jawnym zaznaczeniem pulapki "Warsztat 2 nie zadziala po samym Module 2"),
+scope boundary z `docs/04-pre-implementation-analysis.md` ("Poza zakresem
+v1": pelne Lakeflow Pipelines, pelne CI/CD deploy, pelny Power BI Desktop
+hands-on per uczestnik, AI/BI Dashboards/Genie, Data Vault/Inmon/data mesh,
+pelny wariant medyczny), oraz per modul/warsztat (5 modulow + 2 warsztaty)
+4 wymagane typy notatek: co mowic, gdzie robic demo UI, gdzie skracac
+jesli czasu malo, typowe bledy uczestnikow.
+
+**GLOBAL-03 — nowy `docs/08-smoke-test-plan.md`.** Run order z
+`docs/05-implementation-report.md` sekcja "Rekomendowany test live",
+zaktualizowany o stan repo po blokach 1-7: 8-krokowa kolejnosc
+(pre_config -> generator -> m1 -> m2 -> w1_solution -> m3 -> w2_solution ->
+m4), z jawna notatka, ze exercise warianty warsztatow testowane sa osobno
+(struktura/precheck, nie merytoryka). Checklist obejmuje: ogolne sprawdzenie
+kazdego kroku, test negatywny precheck_cell poza kolejnoscia (2 scenariusze:
+m2 przed generatorem, w2 przed m3), istnienie tabel i sanity row counts,
+oraz dedykowana sekcja 3.4 z tabela wszystkich 5 wygenerowanych obiektow BI
+Gold w calym kursie (`fact_sales_dashboard`,
+`fact_sales_dashboard_monthly`, `fact_sales_dashboard_segment_monthly`
+[bonus, M2-06], `fact_sales_dashboard_channel_daily` [Warsztat 1],
+`v_fact_sales_incremental` [Modul 3, VIEW]) z miejscem budowy i grain.
+Dokument jawnie stwierdza w naglowku i w sekcji 0, ze test NIE zostal
+jeszcze wykonany na zywym workspace — to jest plan na nastepny krok, nie
+potwierdzony wynik. Sekcja 0 potwierdza aktualna liste 11 plikow `.ipynb`
+w repo (`find . -name "*.ipynb"`), zgodna z lista z implementation report.
+
+**GLOBAL-04 — pricing screenshot caveat w generatorze.** Dotychczas
+`notebook_module_1()` i `notebook_module_4()` (`scripts/build_materials_v1.py`)
+osadzaly `sql_warehouse_cost_decision.png` z luzna wzmianka o pliku
+docelowym, ale bez jawnego ostrzezenia po polsku wymaganego przez backlog.
+Dodano identyczny blockquote callout bezposrednio pod obrazem w obu
+notebookach: "Ten zrzut ekranu trzeba odswiezyc z aktualnej strony
+Databricks Pricing przed pierwszym prowadzeniem szkolenia - obecny diagram
+jest wygenerowany, nie jest realnym cennikiem." plus odeslanie do
+docelowej nazwy pliku (`assets/images/databricks_pricing_YYYY-MM-DD.png`)
+i do `docs/04-pre-implementation-analysis.md` sekcji "Screenshot pricingu".
+
+### Weryfikacja (raw output)
+
+```
+$ .venv/bin/python scripts/build_materials_v1.py
+Built Databricks-Data-Analyst-Medi v1 materials
+
+$ .venv/bin/python -c "nbformat.validate + ast.parse sweep"
+data/generate_training_dataset.ipynb: 24 cells (14 code), compile_errors=0 [OK]
+notebooks/m1_sql_warehouse_notebooks.ipynb: 23 cells (10 code), compile_errors=0 [OK]
+notebooks/m2_gold_kpi_best_practices.ipynb: 36 cells (16 code), compile_errors=0 [OK]
+notebooks/m3_powerbi_semantic_dataset.ipynb: 24 cells (7 code), compile_errors=0 [OK]
+notebooks/m4_performance_automation_cicd_orientation.ipynb: 25 cells (12 code), compile_errors=0 [OK]
+setup/00_pre_config.ipynb: 4 cells (2 code), compile_errors=0 [OK]
+setup/00_setup.ipynb: 3 cells (2 code), compile_errors=0 [OK]
+workshops/w1_gold_kpi_exercise.ipynb: 19 cells (9 code), compile_errors=0 [OK]
+workshops/w1_gold_kpi_solution.ipynb: 22 cells (10 code), compile_errors=0 [OK]
+workshops/w2_powerbi_dataset_exercise.ipynb: 16 cells (5 code), compile_errors=0 [OK]
+workshops/w2_powerbi_dataset_solution.ipynb: 17 cells (6 code), compile_errors=0 [OK]
+TOTAL ERRORS: 0
+```
+
+Cell counts identyczne do stanu po Block 7 dla wszystkich notebookow poza
+m1/m4, ktore rosly tylko o tresc markdown wewnatrz juz istniejacych komorek
+(blockquote dodany do istniejacej komorki, nie nowa komorka) - stad
+`m1`=23 (bez zmian liczby komorek vs Block 7) i `m4`=25 (bez zmian liczby
+komorek vs Block 6).
+
+Pelny regression sweep (`git diff --stat` + linia-po-linii z `grep -v
+'"id":'`): 9 z 11 notebookow ma dokladnie 2 niezerowe linie diff (tylko
+`"id"` cell UUID, losowy per build run) - zero zmian tresci. Tylko `m1` i
+`m4` maja realne zmiany tresci, dokladnie po 9 linii kazdy (dodanie
+6-liniowego blockquote + otaczajace puste linie) - zgodne z zamierzona
+zmiana GLOBAL-04, zero regresji gdzie indziej.
+
+Grep proof: `docs/TRAINER_GUIDE.md` zawiera 7 naglowkow modul/warsztat
+(Modul 1-4 + Warsztat 1-2, jeden modul = jedna sekcja), z 6-7 wystapien
+kazdego z 4 wymaganych typow notatek ("co mowic" 6x, "gdzie robic demo" 6x,
+"gdzie skracac" 7x, "typowe bledy" 6x - liczone case-insensitive po calym
+pliku, wliczajac naglowki sekcji); tabela cell-count obecna (9 wierszy);
+sekcja "Lancuch zaleznosci" z pelnym diagramem ASCII obecna; sekcja "Zakres
+poza v1" z 6 punktami z `docs/04-pre-implementation-analysis.md` obecna.
+`docs/08-smoke-test-plan.md` istnieje (10334 bajtow), zawiera fraze "nie
+zostal jeszcze wykonany", oraz 10 wystapien nazw 4 z 5 obiektow BI Gold
+(piaty, `fact_sales_dashboard`, wystepuje rowniez wielokrotnie jako prefiks
+pozostalych nazw). Notebooki `m1` i `m4` zawieraja po 1 wystapieniu
+dokladnej frazy "Ten zrzut ekranu trzeba odswiezyc" kazdy.
+
+Hash commitu: patrz `git log -1 --oneline` po commicie tego bloku.

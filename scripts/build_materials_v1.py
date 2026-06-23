@@ -1487,6 +1487,13 @@ def notebook_module_1() -> None:
 
 ![SQL Warehouse cost decision](../assets/images/sql_warehouse_cost_decision.png)
 
+> **TODO trenera (pre-delivery):** Ten zrzut ekranu trzeba odswiezyc z
+> aktualnej strony Databricks Pricing przed pierwszym prowadzeniem
+> szkolenia - obecny diagram jest wygenerowany, nie jest realnym cennikiem.
+> Docelowy plik: `assets/images/databricks_pricing_YYYY-MM-DD.png`
+> (z data wykonania zrzutu), patrz `docs/04-pre-implementation-analysis.md`
+> sekcja "Screenshot pricingu".
+
 This module opens the RetailHub case end to end. RetailHub wants an
 **Executive KPI Dashboard** in Power BI, built on top of Databricks. The goal
 here is not only to run SQL - it is to start making the same decisions a real
@@ -2805,6 +2812,13 @@ above:
         md_cell("""## 3. Cost guardrails
 
 ![SQL Warehouse cost decision](../assets/images/sql_warehouse_cost_decision.png)
+
+> **TODO trenera (pre-delivery):** Ten zrzut ekranu trzeba odswiezyc z
+> aktualnej strony Databricks Pricing przed pierwszym prowadzeniem
+> szkolenia - obecny diagram jest wygenerowany, nie jest realnym cennikiem.
+> Docelowy plik: `assets/images/databricks_pricing_YYYY-MM-DD.png`
+> (z data wykonania zrzutu), patrz `docs/04-pre-implementation-analysis.md`
+> sekcja "Screenshot pricingu".
 
 Use `docs/templates/cost-awareness-checklist.md` as the working artifact.
 The key training message: live BI is not free. It changes the warehouse usage
