@@ -30,6 +30,10 @@ Setup resolves the Unity Catalog name from the Databricks user:
 Trainer mode is used when the Databricks user contains `trainer` or `trener`,
 or when the user is `krzysztof.burejza`.
 
+`setup/00_pre_config.ipynb` creates the catalog with `MANAGED LOCATION`.
+Before running it, verify `STORAGE_LOCATION` in that notebook for the target
+workspace storage account/container.
+
 ## Included For Testing
 
 ```text
