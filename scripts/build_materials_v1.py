@@ -3755,15 +3755,15 @@ resources:
           notebook_task:
             notebook_path: ../notebooks/m2_gold_kpi_best_practices.ipynb
             source: WORKSPACE
-        - task_key: build_bi_dataset
+        - task_key: refresh_incremental_view
           depends_on:
             - task_key: refresh_gold
           notebook_task:
             notebook_path: ../notebooks/m3_powerbi_semantic_dataset.ipynb
             source: WORKSPACE
-        - task_key: refresh_incremental_view
+        - task_key: validate_bi_readiness
           depends_on:
-            - task_key: build_bi_dataset
+            - task_key: refresh_incremental_view
           notebook_task:
             notebook_path: ../notebooks/m4_performance_automation_cicd_orientation.ipynb
             source: WORKSPACE

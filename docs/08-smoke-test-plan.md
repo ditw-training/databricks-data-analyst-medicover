@@ -153,8 +153,8 @@ Checklist:
       1-5) wykonują się bez błędu; decision log row z Zadania 5 ma
       wypełnione wszystkie kolumny (nie placeholder).
 - [ ] `workshops/w2_powerbi_dataset_solution.ipynb`: wszystkie 6 zadań
-      (Task 1-6) wykonują się bez błędu; BI contract (Zadanie 5) i cost
-      guardrails (Zadanie 6) tabele są wypełnione, nie placeholder.
+      (Task 1-6) wykonują się bez błędu; BI contract (Task 5) i cost
+      guardrails (Task 6) tabele są wypełnione, nie placeholder.
 
 ### 3.6 Moduł 4 — performance i automation orientacja
 

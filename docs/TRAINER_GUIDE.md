@@ -256,15 +256,15 @@ zgodne z Ryzykiem 3 z `docs/04-pre-implementation-analysis.md`.
 **Gdzie robić demo UI:** Jak w Warsztacie 1 — głównie praca w
 notebooku/SQL, bez nowego UI poza tym, co już pokazano w Module 3.
 
-**Gdzie skracać jeśli czasu mało:** Zadanie 6 (cost guardrails wg
+**Gdzie skracać jeśli czasu mało:** Task 6 (cost guardrails wg
 `docs/templates/cost-awareness-checklist.md`) jest najszybsze do skrócenia
-do ustnej dyskusji — wartość edukacyjna jest w Zadaniach 1-5 (wybór source,
+do ustnej dyskusji — wartość edukacyjna jest w Tasks 1-5 (wybór source,
 Import/DirectQuery decyzja, incremental refresh, BI contract).
 
-**Typowe błędy uczestników:** Zadanie 4 (własny boundary test na innym
+**Typowe błędy uczestników:** Task 4 (własny boundary test na innym
 oknie dat niż przykład z Module 3) — uczestnicy czasem kopiują dokładnie
 przykład z Module 3 zamiast użyć nowego okna (`2025-04-01`/`2025-07-01`).
-Zadanie 3 — uczestnicy czasem wybierają DirectQuery dla summary page
+Task 3 — uczestnicy czasem wybierają DirectQuery dla summary page
 "bo jest dokładniejszy", mimo że summary page ma miesięczny grain i nie
 potrzebuje intra-day freshness.
 

@@ -769,3 +769,95 @@ pozostalych nazw). Notebooki `m1` i `m4` zawieraja po 1 wystapieniu
 dokladnej frazy "Ten zrzut ekranu trzeba odswiezyc" kazdy.
 
 Hash commitu: patrz `git log -1 --oneline` po commicie tego bloku.
+
+## Medi Block 9 — Final QA pass
+
+Niezalezna weryfikacja koncowa (Faza 3, swiezy kontekst, agent nie
+uczestniczyl w budowie blokow 1-8). Pelny zakres: registry consistency
+(inwentaryzacja wszystkich `CREATE TABLE`/`CREATE VIEW` i wszystkich
+referencji `FROM`/`JOIN` w 11 notebookach), precheck_cell coverage i
+poprawnosc nazw plikow prerequisite, TODO/solution discipline, terminologia,
+image references, `bundle/databricks.yml`, cell-count vs
+`docs/TRAINER_GUIDE.md`, pelny nbformat+compile sweep, smoke-test-plan
+accuracy. Raport: `docs/09-qa-report-final.md`.
+
+**Znalezione i naprawione (BLOCKER):** `bundle/databricks.yml` mial
+zamienione `task_key`/`notebook_path` pary — task `build_bi_dataset`
+wskazywal na `m3_powerbi_semantic_dataset.ipynb` (notebook, ktory faktycznie
+tworzy `gold.v_fact_sales_incremental`), a task `refresh_incremental_view`
+wskazywal na `m4_performance_automation_cicd_orientation.ipynb` (notebook
+orientacyjny, ktory nie tworzy zadnej tabeli Gold). Naprawiono w
+`write_bundle()` w `scripts/build_materials_v1.py`: task wskazujacy na `m3`
+przemianowano na `refresh_incremental_view`, task wskazujacy na `m4`
+przemianowano na `validate_bi_readiness`. Zregenerowano, zweryfikowano YAML
++ pelny nbformat/compile sweep — zero regresji tresci w 11 notebookach
+(`git diff` po regeneracji: 0 linii roznicy poza `"id"`).
+
+**Znalezione i udokumentowane, NIE naprawione (BLOCKER do decyzji
+wlasciciela):** cala tresc notebookow (markdown + komentarze kodu) w
+wszystkich 11 plikach `.ipynb` jest po angielsku, wbrew jawnemu wymogowi z
+`docs/01-training-structure.md` ("Materialy w notebookach po polsku").
+Wymog byl lamany od pierwszego buildu (`implementacja v1`) i nigdy nie
+zrealizowany przez 8 kolejnych blokow rozbudowy. Block 8 retroaktywnie
+udokumentowal faktyczny stan w `docs/TRAINER_GUIDE.md` ("Format" sekcja:
+"notebooki ... po angielsku, ten guide jest po polsku"), ale nigdy nie
+zsynchronizowal tego wstecz z `docs/01-training-structure.md`. Dodano
+adnotacje w `docs/01-training-structure.md` wskazujaca faktyczny stan;
+tlumaczenie ~4700 linii tresci na polski pozostaje osobna decyzja
+wlasciciela, poza zakresem tej sesji QA.
+
+**Naprawione (MINOR):** niespojnosc terminologii "Zadanie N" (PL) vs
+"Task N" (EN) miedzy Warsztatem 1 i Warsztatem 2 — kazdy notebook jest
+wewnetrznie spojny, ale `docs/TRAINER_GUIDE.md` i
+`docs/08-smoke-test-plan.md` blednie uzywaly "Zadanie" w sekcjach
+dotyczacych Warsztatu 2 (ktory faktycznie ma naglowki "Task N"). Poprawiono
+w obu plikach dokumentacji.
+
+**Udokumentowane, nie naprawione (MINOR):** precheck_cell w Module 4 wymaga
+3 tabel z 2 roznych modulow (M2 + M3), ale komunikat bledu wskazuje tylko
+`m3_powerbi_semantic_dataset.ipynb` jako prereq. Niskie ryzyko praktyczne
+(sekwencyjny run order + precheck M3 i tak lapie brak M2 wczesniej), ale
+naprawa wymagalaby rozszerzenia signature `precheck_cell()` (per-tabela
+prereq mapping) uzywanego w 7 miejscach — wieksza zmiana designu, nie
+"cheap fix".
+
+**Potwierdzone czyste (OK), zero zmian potrzebnych:** registry consistency
+(zero orphan references, wszystkie kolumny w CTAS/JOIN zgodne ze
+schematami zrodlowymi, w tym ponowna weryfikacja dwoch bugow naprawionych
+wczesniej w Block 1-2), pozostale 6 z 7 precheck_cell wywolan (poprawne
+nazwy plikow prerequisite), TODO/solution discipline (oba `_solution.ipynb`
+maja 0 TODO, oba `_exercise.ipynb` maja TODO rozlozone po wszystkich
+zadaniach), zero literowek w nazwach tabel/widok, image references (21/21
+plikow na dysku referencjonowanych, zero orphan assets), cell-count w
+`docs/TRAINER_GUIDE.md` zgodny ze swiezym sweep'em dla wszystkich 9
+notebookow z tabeli, `docs/08-smoke-test-plan.md` lista plikow i run order
+zgodne z aktualnym stanem repo.
+
+### Weryfikacja (raw output)
+
+```
+$ .venv/bin/python scripts/build_materials_v1.py
+Built Databricks-Data-Analyst-Medi v1 materials
+
+$ .venv/bin/python -c "yaml.safe_load + task wiring check"
+Job refresh_gold_bi_dataset: 4 tasks
+  - validate_sources -> ../notebooks/m1_sql_warehouse_notebooks.ipynb
+  - refresh_gold -> ../notebooks/m2_gold_kpi_best_practices.ipynb
+  - refresh_incremental_view -> ../notebooks/m3_powerbi_semantic_dataset.ipynb
+  - validate_bi_readiness -> ../notebooks/m4_performance_automation_cicd_orientation.ipynb
+
+$ .venv/bin/python -c "nbformat.validate + ast.parse sweep, 11/11 notebooks"
+TOTAL COMPILE ERRORS: 0
+(cell counts unchanged vs Block 8: 24, 23, 36, 19, 22, 24, 16, 17, 25, 4, 3)
+```
+
+`git diff --stat` po fixach: 16 plikow zmienionych (`bundle/databricks.yml`,
+`scripts/build_materials_v1.py`, `docs/01-training-structure.md`,
+`docs/TRAINER_GUIDE.md`, `docs/08-smoke-test-plan.md`, oraz 11 notebookow
+przez regeneracje). Wszystkie 11 notebookow zweryfikowane linia-po-linii
+(`grep -v '"id":'`) — 0 linii roznicy tresci, wylacznie cell UUID. Jedyne
+realne zmiany tresci: 6-liniowy task-wiring swap w `bundle/databricks.yml`
+i odpowiadajaca zmiana w generatorze, plus tekstowe poprawki w 3 plikach
+`docs/*.md`.
+
+Hash commitu: patrz `git log -1 --oneline` po commicie tego bloku.
