@@ -15,20 +15,27 @@ Before the course, the trainer runs:
 
 ## Participant Run Order
 
-During the course, participants use the notebooks in this order:
+### Day 1
 
 1. `setup/00_setup.ipynb`
 2. `notebooks/demo/day1_01_sql_warehouse_analyst_tooling.ipynb`
-3. `notebooks/demo/day1_02_lakehouse_delta_gold.ipynb`
-4. `notebooks/demo/day1_03_gold_modeling_for_powerbi.ipynb`
-5. `notebooks/workshops/w1_gold_kpi_exercise.ipynb`
-6. `notebooks/demo/day2_01_powerbi_semantic_model.ipynb`
-7. `notebooks/demo/day2_02_performance_automation_cicd.ipynb`
-8. `notebooks/workshops/w2_powerbi_dataset_exercise.ipynb`
+3. `notebooks/demo/day1_02_sql_programming_architecture.ipynb`
+4. `notebooks/workshops/w1_kimball_model_build.ipynb` ← participants build Gold star schema
+5. `notebooks/demo/day1_03_kimball_review_powerbi_prep.ipynb`
+
+### Day 2
+
+6. `notebooks/workshops/w2_kpi_bi_readiness.ipynb` ← participants add KPI layer
+7. `notebooks/demo/day2_01_powerbi_semantic_model.ipynb`
+8. `notebooks/demo/day2_02_performance_automation_cicd.ipynb`
 9. `notebooks/demo/day2_03_aibi_dashboards_genie.ipynb`
 
 `data/generate_training_dataset.ipynb` can also be run manually for a single
 catalog if a participant environment must be rebuilt.
+
+If a participant does not finish the workshops, the trainer can run
+`setup/00_fallback_gold.ipynb` to build the complete Gold model automatically
+for a given `TARGET_CATALOG`.
 
 Solution notebooks are available in `notebooks/workshops/` for trainer
 validation.
