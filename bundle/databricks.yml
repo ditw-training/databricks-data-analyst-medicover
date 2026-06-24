@@ -1,7 +1,7 @@
 # Reference DABs / Declarative Automation Bundles example.
 # Validate against the current Databricks CLI/docs before live use.
 # This file has NOT been deployed or run against a live workspace - see
-# Day 2 notebook (notebooks/demo/day2_02_performance_automation_cicd.ipynb) for
+# Day 2 notebook (notebooks/demo/day2_02_performance_automation_cicd_orientation.ipynb) for
 # the `databricks bundle validate` instructions and the orientation-level
 # scope note.
 
@@ -24,19 +24,19 @@ resources:
       tasks:
         - task_key: validate_sources
           notebook_task:
-            notebook_path: ../notebooks/demo/day1_01_sql_warehouse_analyst_tooling.ipynb
+            notebook_path: ../notebooks/demo/day1_01_lakehouse_sql_warehouse_tooling.ipynb
             source: WORKSPACE
         - task_key: build_gold
           depends_on:
             - task_key: validate_sources
           notebook_task:
-            notebook_path: ../notebooks/workshops/w1_gold_kpi_solution.ipynb
+            notebook_path: ../notebooks/workshops/solution/w1_gold_kpi_solution.ipynb
             source: WORKSPACE
         - task_key: validate_powerbi_handoff
           depends_on:
             - task_key: build_gold
           notebook_task:
-            notebook_path: ../notebooks/demo/day1_03_gold_modeling_for_powerbi.ipynb
+            notebook_path: ../notebooks/demo/day1_03_optional_w1_gold_handoff_check.ipynb
             source: WORKSPACE
         - task_key: refresh_incremental_view
           depends_on:
@@ -44,11 +44,17 @@ resources:
           notebook_task:
             notebook_path: ../notebooks/demo/day2_01_powerbi_semantic_model.ipynb
             source: WORKSPACE
-        - task_key: validate_bi_readiness
+        - task_key: build_powerbi_serving
           depends_on:
             - task_key: refresh_incremental_view
           notebook_task:
-            notebook_path: ../notebooks/demo/day2_02_performance_automation_cicd.ipynb
+            notebook_path: ../notebooks/workshops/solution/w2_powerbi_dataset_solution.ipynb
+            source: WORKSPACE
+        - task_key: validate_bi_readiness
+          depends_on:
+            - task_key: build_powerbi_serving
+          notebook_task:
+            notebook_path: ../notebooks/demo/day2_02_performance_automation_cicd_orientation.ipynb
             source: WORKSPACE
 
 targets:
