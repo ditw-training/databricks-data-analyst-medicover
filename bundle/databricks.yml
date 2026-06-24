@@ -30,9 +30,9 @@ resources:
           depends_on:
             - task_key: validate_sources
           notebook_task:
-            notebook_path: ../notebooks/demo/day1_02_lakehouse_delta_gold.ipynb
+            notebook_path: ../notebooks/workshops/w1_gold_kpi_solution.ipynb
             source: WORKSPACE
-        - task_key: refresh_gold
+        - task_key: validate_powerbi_handoff
           depends_on:
             - task_key: build_gold
           notebook_task:
@@ -40,7 +40,7 @@ resources:
             source: WORKSPACE
         - task_key: refresh_incremental_view
           depends_on:
-            - task_key: refresh_gold
+            - task_key: validate_powerbi_handoff
           notebook_task:
             notebook_path: ../notebooks/demo/day2_01_powerbi_semantic_model.ipynb
             source: WORKSPACE
