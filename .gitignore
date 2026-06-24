@@ -24,6 +24,8 @@ __pycache__/
 scripts/
 presentation/
 tools/
+_old/
+**/_old/
 notebooks/_old/
 notebooks/*.ipynb
 /workshops/
