@@ -51,6 +51,11 @@ assets/images/*
 !assets/images/powerbi_report_mockup.png
 !assets/images/query_profile_reading_map.png
 !assets/images/retailhub_source_map.png
+!assets/images/day1_01_*.png
+!assets/images/day1_02_*.png
+!assets/images/day1_03_*.png
+!assets/images/w1_*.png
+!assets/images/source_catalog_explorer_hierarchy.png
 !assets/images/source_catalog_explorer_lineage.png
 !assets/images/source_sql_editor.png
 !assets/images/sql_warehouse_cost_decision.png
