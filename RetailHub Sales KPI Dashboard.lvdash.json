@@ -1,0 +1,1113 @@
+{
+  "datasets": [
+    {
+      "name": "7e93cbdc",
+      "displayName": "dim_customer",
+      "config": {
+        "version": "1.1",
+        "source": "retailhub_trainer.gold.dim_customer",
+        "dimensions": [
+          {
+            "name": "customer_id",
+            "expr": "source.customer_id",
+            "displayName": "Customer Id"
+          },
+          {
+            "name": "customer_name",
+            "expr": "source.customer_name",
+            "displayName": "Customer Name"
+          },
+          {
+            "name": "city",
+            "expr": "source.city",
+            "displayName": "City"
+          },
+          {
+            "name": "customer_region",
+            "expr": "source.customer_region",
+            "displayName": "Customer Region"
+          },
+          {
+            "name": "country",
+            "expr": "source.country",
+            "displayName": "Country"
+          },
+          {
+            "name": "segment",
+            "expr": "source.segment",
+            "displayName": "Segment"
+          },
+          {
+            "name": "created_date",
+            "expr": "source.created_date",
+            "displayName": "Created Date"
+          }
+        ],
+        "measures": [
+          {
+            "name": "count",
+            "expr": "COUNT(*)",
+            "comment": "Represents the total number of rows in the dataset. Use this measure to count all",
+            "displayName": "Count"
+          }
+        ]
+      }
+    },
+    {
+      "name": "1d8f169d",
+      "displayName": "dim_date",
+      "config": {
+        "version": "1.1",
+        "source": "retailhub_trainer.gold.dim_date",
+        "dimensions": [
+          {
+            "name": "date_key",
+            "expr": "source.date_key",
+            "displayName": "Date Key"
+          },
+          {
+            "name": "year",
+            "expr": "source.year",
+            "displayName": "Year"
+          },
+          {
+            "name": "quarter",
+            "expr": "source.quarter",
+            "displayName": "Quarter"
+          },
+          {
+            "name": "month",
+            "expr": "source.month",
+            "displayName": "Month"
+          },
+          {
+            "name": "month_name",
+            "expr": "source.month_name",
+            "displayName": "Month Name"
+          },
+          {
+            "name": "year_month",
+            "expr": "source.year_month",
+            "displayName": "Year Month"
+          },
+          {
+            "name": "day_of_month",
+            "expr": "source.day_of_month",
+            "displayName": "Day Of Month"
+          },
+          {
+            "name": "day_of_week",
+            "expr": "source.day_of_week",
+            "displayName": "Day Of Week"
+          },
+          {
+            "name": "day_name",
+            "expr": "source.day_name",
+            "displayName": "Day Name"
+          },
+          {
+            "name": "is_weekend",
+            "expr": "source.is_weekend",
+            "displayName": "Is Weekend"
+          }
+        ],
+        "measures": [
+          {
+            "name": "count",
+            "expr": "COUNT(*)",
+            "comment": "Represents the total number of rows in the dataset. Use this measure to count all",
+            "displayName": "Count"
+          }
+        ]
+      }
+    },
+    {
+      "name": "205ba3fc",
+      "displayName": "dim_product",
+      "config": {
+        "version": "1.1",
+        "source": "retailhub_trainer.gold.dim_product",
+        "dimensions": [
+          {
+            "name": "product_id",
+            "expr": "source.product_id",
+            "displayName": "Product Id"
+          },
+          {
+            "name": "product_name",
+            "expr": "source.product_name",
+            "displayName": "Product Name"
+          },
+          {
+            "name": "category",
+            "expr": "source.category",
+            "displayName": "Category"
+          },
+          {
+            "name": "subcategory",
+            "expr": "source.subcategory",
+            "displayName": "Subcategory"
+          },
+          {
+            "name": "standard_unit_cost",
+            "expr": "source.standard_unit_cost",
+            "displayName": "Standard Unit Cost"
+          },
+          {
+            "name": "list_unit_price",
+            "expr": "source.list_unit_price",
+            "displayName": "List Unit Price"
+          },
+          {
+            "name": "is_active",
+            "expr": "source.is_active",
+            "displayName": "Is Active"
+          }
+        ],
+        "measures": [
+          {
+            "name": "count",
+            "expr": "COUNT(*)",
+            "comment": "Represents the total number of rows in the dataset. Use this measure to count all",
+            "displayName": "Count"
+          }
+        ]
+      }
+    },
+    {
+      "name": "288b9a4f",
+      "displayName": "fact_sales",
+      "config": {
+        "version": "1.1",
+        "source": "retailhub_trainer.gold.fact_sales",
+        "dimensions": [
+          {
+            "name": "line_id",
+            "expr": "source.line_id",
+            "displayName": "Line Id"
+          },
+          {
+            "name": "order_id",
+            "expr": "source.order_id",
+            "displayName": "Order Id"
+          },
+          {
+            "name": "order_date",
+            "expr": "source.order_date",
+            "displayName": "Order Date"
+          },
+          {
+            "name": "customer_id",
+            "expr": "source.customer_id",
+            "displayName": "Customer Id"
+          },
+          {
+            "name": "product_id",
+            "expr": "source.product_id",
+            "displayName": "Product Id"
+          },
+          {
+            "name": "channel",
+            "expr": "source.channel",
+            "displayName": "Channel"
+          },
+          {
+            "name": "status",
+            "expr": "source.status",
+            "displayName": "Status"
+          },
+          {
+            "name": "source_region",
+            "expr": "source.source_region",
+            "displayName": "Source Region"
+          },
+          {
+            "name": "quantity",
+            "expr": "source.quantity",
+            "displayName": "Quantity"
+          },
+          {
+            "name": "unit_price",
+            "expr": "source.unit_price",
+            "displayName": "Unit Price"
+          },
+          {
+            "name": "unit_cost",
+            "expr": "source.unit_cost",
+            "displayName": "Unit Cost"
+          },
+          {
+            "name": "discount_pct",
+            "expr": "source.discount_pct",
+            "displayName": "Discount Pct"
+          },
+          {
+            "name": "line_revenue",
+            "expr": "source.line_revenue",
+            "displayName": "Line Revenue"
+          },
+          {
+            "name": "line_cost",
+            "expr": "source.line_cost",
+            "displayName": "Line Cost"
+          },
+          {
+            "name": "line_margin",
+            "expr": "source.line_margin",
+            "displayName": "Line Margin"
+          },
+          {
+            "name": "source_category",
+            "expr": "source.source_category",
+            "displayName": "Source Category"
+          },
+          {
+            "name": "is_completed",
+            "expr": "source.is_completed",
+            "displayName": "Is Completed"
+          },
+          {
+            "name": "is_returned",
+            "expr": "source.is_returned",
+            "displayName": "Is Returned"
+          },
+          {
+            "name": "is_cancelled",
+            "expr": "source.is_cancelled",
+            "displayName": "Is Cancelled"
+          }
+        ],
+        "measures": [
+          {
+            "name": "count",
+            "expr": "COUNT(*)",
+            "comment": "Represents the total number of rows in the dataset. Use this measure to count all",
+            "displayName": "Count"
+          }
+        ]
+      }
+    },
+    {
+      "name": "2e6f49df",
+      "displayName": "fact_sales_dashboard",
+      "config": {
+        "version": "1.1",
+        "source": "retailhub_trainer.gold.fact_sales_dashboard",
+        "dimensions": [
+          {
+            "name": "line_id",
+            "expr": "source.line_id",
+            "displayName": "Line Id"
+          },
+          {
+            "name": "order_id",
+            "expr": "source.order_id",
+            "displayName": "Order Id"
+          },
+          {
+            "name": "order_date",
+            "expr": "source.order_date",
+            "displayName": "Order Date"
+          },
+          {
+            "name": "year",
+            "expr": "source.year",
+            "displayName": "Year"
+          },
+          {
+            "name": "quarter",
+            "expr": "source.quarter",
+            "displayName": "Quarter"
+          },
+          {
+            "name": "month",
+            "expr": "source.month",
+            "displayName": "Month"
+          },
+          {
+            "name": "month_name",
+            "expr": "source.month_name",
+            "displayName": "Month Name"
+          },
+          {
+            "name": "year_month",
+            "expr": "source.year_month",
+            "displayName": "Year Month"
+          },
+          {
+            "name": "day_of_week",
+            "expr": "source.day_of_week",
+            "displayName": "Day Of Week"
+          },
+          {
+            "name": "day_name",
+            "expr": "source.day_name",
+            "displayName": "Day Name"
+          },
+          {
+            "name": "is_weekend",
+            "expr": "source.is_weekend",
+            "displayName": "Is Weekend"
+          },
+          {
+            "name": "customer_id",
+            "expr": "source.customer_id",
+            "displayName": "Customer Id"
+          },
+          {
+            "name": "customer_name",
+            "expr": "source.customer_name",
+            "displayName": "Customer Name"
+          },
+          {
+            "name": "city",
+            "expr": "source.city",
+            "displayName": "City"
+          },
+          {
+            "name": "customer_region",
+            "expr": "source.customer_region",
+            "displayName": "Customer Region"
+          },
+          {
+            "name": "country",
+            "expr": "source.country",
+            "displayName": "Country"
+          },
+          {
+            "name": "segment",
+            "expr": "source.segment",
+            "displayName": "Segment"
+          },
+          {
+            "name": "product_id",
+            "expr": "source.product_id",
+            "displayName": "Product Id"
+          },
+          {
+            "name": "product_name",
+            "expr": "source.product_name",
+            "displayName": "Product Name"
+          },
+          {
+            "name": "category",
+            "expr": "source.category",
+            "displayName": "Category"
+          },
+          {
+            "name": "subcategory",
+            "expr": "source.subcategory",
+            "displayName": "Subcategory"
+          },
+          {
+            "name": "product_is_active",
+            "expr": "source.product_is_active",
+            "displayName": "Product Is Active"
+          },
+          {
+            "name": "channel",
+            "expr": "source.channel",
+            "displayName": "Channel"
+          },
+          {
+            "name": "status",
+            "expr": "source.status",
+            "displayName": "Status"
+          },
+          {
+            "name": "quantity",
+            "expr": "source.quantity",
+            "displayName": "Quantity"
+          },
+          {
+            "name": "unit_price",
+            "expr": "source.unit_price",
+            "displayName": "Unit Price"
+          },
+          {
+            "name": "unit_cost",
+            "expr": "source.unit_cost",
+            "displayName": "Unit Cost"
+          },
+          {
+            "name": "discount_pct",
+            "expr": "source.discount_pct",
+            "displayName": "Discount Pct"
+          },
+          {
+            "name": "line_revenue",
+            "expr": "source.line_revenue",
+            "displayName": "Line Revenue"
+          },
+          {
+            "name": "line_cost",
+            "expr": "source.line_cost",
+            "displayName": "Line Cost"
+          },
+          {
+            "name": "line_margin",
+            "expr": "source.line_margin",
+            "displayName": "Line Margin"
+          },
+          {
+            "name": "is_completed",
+            "expr": "source.is_completed",
+            "displayName": "Is Completed"
+          },
+          {
+            "name": "is_returned",
+            "expr": "source.is_returned",
+            "displayName": "Is Returned"
+          },
+          {
+            "name": "is_cancelled",
+            "expr": "source.is_cancelled",
+            "displayName": "Is Cancelled"
+          }
+        ],
+        "measures": [
+          {
+            "name": "count",
+            "expr": "COUNT(*)",
+            "comment": "Represents the total number of rows in the dataset. Use this measure to count all",
+            "displayName": "Count"
+          },
+          {
+            "name": "total_revenue",
+            "expr": "SUM(line_revenue)",
+            "displayName": "Revenue"
+          },
+          {
+            "name": "total_margin",
+            "expr": "SUM(line_margin)",
+            "displayName": "Gross Margin"
+          },
+          {
+            "name": "completed_orders",
+            "expr": "COUNT(DISTINCT order_id)",
+            "displayName": "Completed Orders"
+          },
+          {
+            "name": "margin_rate_pct",
+            "expr": "100.0 * MEASURE(total_margin) / NULLIF(MEASURE(total_revenue), 0)",
+            "displayName": "Margin Rate %"
+          }
+        ]
+      }
+    },
+    {
+      "name": "c9ae80b6",
+      "displayName": "kpi_daily",
+      "config": {
+        "version": "1.1",
+        "source": "retailhub_trainer.gold.kpi_daily",
+        "dimensions": [
+          {
+            "name": "order_date",
+            "expr": "source.order_date",
+            "displayName": "Order Date"
+          },
+          {
+            "name": "revenue",
+            "expr": "source.revenue",
+            "displayName": "Revenue"
+          },
+          {
+            "name": "gross_margin",
+            "expr": "source.gross_margin",
+            "displayName": "Gross Margin"
+          },
+          {
+            "name": "completed_orders",
+            "expr": "source.completed_orders",
+            "displayName": "Completed Orders"
+          },
+          {
+            "name": "returned_orders",
+            "expr": "source.returned_orders",
+            "displayName": "Returned Orders"
+          }
+        ],
+        "measures": [
+          {
+            "name": "count",
+            "expr": "COUNT(*)",
+            "comment": "Represents the total number of rows in the dataset. Use this measure to count all",
+            "displayName": "Count"
+          }
+        ]
+      }
+    },
+    {
+      "name": "16eb7dca",
+      "displayName": "revenue_monthly",
+      "config": {
+        "version": "1.1",
+        "source": "retailhub_trainer.gold.revenue_monthly",
+        "dimensions": [
+          {
+            "name": "year_month",
+            "expr": "source.year_month",
+            "displayName": "Year Month"
+          },
+          {
+            "name": "region",
+            "expr": "source.region",
+            "displayName": "Region"
+          },
+          {
+            "name": "category",
+            "expr": "source.category",
+            "displayName": "Category"
+          },
+          {
+            "name": "revenue",
+            "expr": "source.revenue",
+            "displayName": "Revenue"
+          },
+          {
+            "name": "gross_margin",
+            "expr": "source.gross_margin",
+            "displayName": "Gross Margin"
+          }
+        ],
+        "measures": [
+          {
+            "name": "count",
+            "expr": "COUNT(*)",
+            "comment": "Represents the total number of rows in the dataset. Use this measure to count all",
+            "displayName": "Count"
+          }
+        ]
+      }
+    }
+  ],
+  "pages": [
+    {
+      "name": "d4fbe255",
+      "displayName": "RetailHub",
+      "layout": [
+        {
+          "widget": {
+            "name": "revenue_counter",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "2e6f49df",
+                  "fields": [
+                    {
+                      "name": "measure(total_revenue)",
+                      "expression": "MEASURE(`total_revenue`)"
+                    }
+                  ],
+                  "filters": [
+                    {
+                      "expression": "`is_completed` = true"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "frame": {
+                "title": "Revenue",
+                "showTitle": true
+              },
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "measure(total_revenue)"
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 3,
+            "height": 4
+          }
+        },
+        {
+          "widget": {
+            "name": "gross_margin_counter",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "2e6f49df",
+                  "fields": [
+                    {
+                      "name": "measure(total_margin)",
+                      "expression": "MEASURE(`total_margin`)"
+                    }
+                  ],
+                  "filters": [
+                    {
+                      "expression": "`is_completed` = true"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "frame": {
+                "title": "Gross Margin",
+                "showTitle": true
+              },
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "measure(total_margin)"
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 0,
+            "width": 3,
+            "height": 4
+          }
+        },
+        {
+          "widget": {
+            "name": "completed_orders_counter",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "2e6f49df",
+                  "fields": [
+                    {
+                      "name": "measure(completed_orders)",
+                      "expression": "MEASURE(`completed_orders`)"
+                    }
+                  ],
+                  "filters": [
+                    {
+                      "expression": "`is_completed` = true"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "frame": {
+                "title": "Completed Orders",
+                "showTitle": true
+              },
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "measure(completed_orders)"
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 0,
+            "width": 3,
+            "height": 4
+          }
+        },
+        {
+          "widget": {
+            "name": "margin_rate_counter",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "2e6f49df",
+                  "fields": [
+                    {
+                      "name": "measure(margin_rate_pct)",
+                      "expression": "MEASURE(`margin_rate_pct`)"
+                    }
+                  ],
+                  "filters": [
+                    {
+                      "expression": "`is_completed` = true"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "frame": {
+                "title": "Margin Rate %",
+                "showTitle": true
+              },
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "measure(margin_rate_pct)"
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 9,
+            "y": 0,
+            "width": 3,
+            "height": 4
+          }
+        },
+        {
+          "widget": {
+            "name": "revenue_trend_line",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "2e6f49df",
+                  "fields": [
+                    {
+                      "name": "year_month",
+                      "expression": "`year_month`"
+                    },
+                    {
+                      "name": "measure(total_revenue)",
+                      "expression": "MEASURE(`total_revenue`)"
+                    }
+                  ],
+                  "filters": [
+                    {
+                      "expression": "`is_completed` = true"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "frame": {
+                "title": "Revenue Trend MoM",
+                "showTitle": true
+              },
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "year_month",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "y": {
+                  "fieldName": "measure(total_revenue)",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 4,
+            "width": 6,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "revenue_by_channel_bar",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "2e6f49df",
+                  "fields": [
+                    {
+                      "name": "channel",
+                      "expression": "`channel`"
+                    },
+                    {
+                      "name": "measure(total_revenue)",
+                      "expression": "MEASURE(`total_revenue`)"
+                    }
+                  ],
+                  "filters": [
+                    {
+                      "expression": "`is_completed` = true"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "frame": {
+                "title": "Revenue by Channel",
+                "showTitle": true
+              },
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "channel",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "y": {
+                  "fieldName": "measure(total_revenue)",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 4,
+            "width": 6,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "revenue_by_category_bar",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "2e6f49df",
+                  "fields": [
+                    {
+                      "name": "category",
+                      "expression": "`category`"
+                    },
+                    {
+                      "name": "measure(total_revenue)",
+                      "expression": "MEASURE(`total_revenue`)"
+                    }
+                  ],
+                  "filters": [
+                    {
+                      "expression": "`is_completed` = true"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "frame": {
+                "title": "Top Categories by Revenue",
+                "showTitle": true
+              },
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "category",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "y": {
+                  "fieldName": "measure(total_revenue)",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 11,
+            "width": 6,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "revenue_by_region_pie",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "2e6f49df",
+                  "fields": [
+                    {
+                      "name": "measure(total_revenue)",
+                      "expression": "MEASURE(`total_revenue`)"
+                    },
+                    {
+                      "name": "customer_region",
+                      "expression": "`customer_region`"
+                    }
+                  ],
+                  "filters": [
+                    {
+                      "expression": "`is_completed` = true"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "frame": {
+                "title": "Revenue by Region",
+                "showTitle": true
+              },
+              "widgetType": "pie",
+              "encodings": {
+                "angle": {
+                  "fieldName": "measure(total_revenue)",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "fieldName": "customer_region",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 11,
+            "width": 6,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "monthly_channel_table",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "2e6f49df",
+                  "fields": [
+                    {
+                      "name": "year_month",
+                      "expression": "`year_month`"
+                    },
+                    {
+                      "name": "channel",
+                      "expression": "`channel`"
+                    },
+                    {
+                      "name": "measure(completed_orders)",
+                      "expression": "MEASURE(`completed_orders`)"
+                    },
+                    {
+                      "name": "measure(total_revenue)",
+                      "expression": "MEASURE(`total_revenue`)"
+                    },
+                    {
+                      "name": "measure(total_margin)",
+                      "expression": "MEASURE(`total_margin`)"
+                    },
+                    {
+                      "name": "measure(margin_rate_pct)",
+                      "expression": "MEASURE(`margin_rate_pct`)"
+                    }
+                  ],
+                  "filters": [
+                    {
+                      "expression": "`is_completed` = true"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "frame": {
+                "title": "Revenue and Margin by Month and Channel",
+                "showTitle": true
+              },
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "year_month"
+                  },
+                  {
+                    "fieldName": "channel"
+                  },
+                  {
+                    "fieldName": "measure(completed_orders)"
+                  },
+                  {
+                    "fieldName": "measure(total_revenue)"
+                  },
+                  {
+                    "fieldName": "measure(total_margin)"
+                  },
+                  {
+                    "fieldName": "measure(margin_rate_pct)"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 18,
+            "width": 12,
+            "height": 7
+          }
+        }
+      ],
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layoutVersion": "GRID_V1"
+    }
+  ],
+  "uiSettings": {
+    "theme": {
+      "widgetHeaderAlignment": "ALIGNMENT_UNSPECIFIED"
+    },
+    "applyModeEnabled": false
+  }
+}
