@@ -2,7 +2,7 @@
 -- Query Insights lab / 01 - Pre-check
 -- ==================================
 -- Confirm that the W2 serving objects exist and have data.
--- Expected observation:
+-- Expected result:
 --   - v_fact_sales_incremental is line-grain detail,
 --   - fact_sales_dashboard_monthly is a smaller serving aggregate,
 --   - kpi_monthly is a compact KPI table.

@@ -3,7 +3,7 @@
 -- ==============================================================
 -- Intentionally less BI-friendly: DATE_FORMAT on the filter column prevents
 -- clean partition/file pruning, and the work runs against line-grain detail.
--- Use it to ask participants what they would change before touching warehouse size.
+-- Use it to compare what should change before touching warehouse size.
 
 USE SCHEMA gold;
 

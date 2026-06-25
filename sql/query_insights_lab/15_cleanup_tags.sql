@@ -8,5 +8,5 @@ SET spark.sql.autoBroadcastJoinThreshold = 10485760;
 
 SET QUERY_TAGS['course'] = UNSET,
     QUERY_TAGS['module'] = UNSET,
-    QUERY_TAGS['trainer_demo'] = UNSET,
+    QUERY_TAGS['lab_run'] = UNSET,
     QUERY_TAGS['demo'] = UNSET;

@@ -13,7 +13,7 @@ USE SCHEMA gold;
 -- Session tags for Query Insights / system.query.history.
 SET QUERY_TAGS['course'] = 'databricks_data_analyst_medi',
     QUERY_TAGS['module'] = 'query_insights_optimization',
-    QUERY_TAGS['trainer_demo'] = 'true';
+    QUERY_TAGS['lab_run'] = 'true';
 
 -- Confirm context.
 SELECT

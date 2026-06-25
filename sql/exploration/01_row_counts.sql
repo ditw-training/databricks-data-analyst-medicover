@@ -1,7 +1,7 @@
 -- Day 1 SQL Editor demo: RetailHub source discovery
 -- 01 - Row counts across Silver tables
 -- ==================================================
--- Expected observation: customers/products are master data;
+-- Expected result: customers/products are master data;
 -- orders/lines are transactional.
 
 USE SCHEMA silver;

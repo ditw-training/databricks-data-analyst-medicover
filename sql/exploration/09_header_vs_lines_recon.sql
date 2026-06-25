@@ -1,7 +1,7 @@
 -- Day 1 SQL Editor demo: RetailHub source discovery
 -- 09 - Header-vs-lines reconciliation sample
 -- ==================================================
--- Expected observation: this detects source-system total mismatches.
+-- Expected result: this detects source-system total mismatches.
 
 USE SCHEMA silver;
 

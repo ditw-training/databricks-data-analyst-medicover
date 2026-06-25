@@ -1,7 +1,7 @@
 -- Databricks Data Analyst Medi
 -- Query Insights lab / 06 - EXPLAIN the detail scan
 -- =================================================
--- Read the physical plan before running large variants in class.
+-- Read the physical plan before running large variants in a shared SQL Warehouse session.
 -- Look for: file scan on v_fact_sales_incremental, the pushed-down filter, and
 -- the aggregate/exchange stages.
 

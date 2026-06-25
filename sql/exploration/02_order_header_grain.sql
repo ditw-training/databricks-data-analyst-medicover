@@ -1,7 +1,7 @@
 -- Day 1 SQL Editor demo: RetailHub source discovery
 -- 02 - Order header grain and date range
 -- ==================================================
--- Expected observation: rows should match distinct_orders for an order header table.
+-- Expected result: rows should match distinct_orders for an order header table.
 
 USE SCHEMA silver;
 

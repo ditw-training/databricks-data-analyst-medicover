@@ -8,7 +8,7 @@
 USE SCHEMA silver;
 
 -- Confirm current SQL context.
--- Expected observation: catalog = your participant catalog, schema = silver.
+-- Expected result: catalog = your participant catalog, schema = silver.
 SELECT
   current_user()    AS current_user,
   current_catalog() AS catalog_name,

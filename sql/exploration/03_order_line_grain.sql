@@ -1,7 +1,7 @@
 -- Day 1 SQL Editor demo: RetailHub source discovery
 -- 03 - Order line grain
 -- ==================================================
--- Expected observation: line_rows is larger than distinct_orders.
+-- Expected result: line_rows is larger than distinct_orders.
 
 USE SCHEMA silver;
 

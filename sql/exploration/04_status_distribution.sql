@@ -1,7 +1,7 @@
 -- Day 1 SQL Editor demo: RetailHub source discovery
 -- 04 - Status distribution
 -- ==================================================
--- Expected observation: not every status should count as completed revenue.
+-- Expected result: not every status should count as completed revenue.
 
 USE SCHEMA silver;
 

@@ -1,7 +1,7 @@
 -- Day 1 SQL Editor demo: RetailHub source discovery
 -- 08 - Source risk register query
 -- ==================================================
--- Expected observation: these are modeling risks to document before building Gold.
+-- Expected result: these are modeling risks to document before building Gold.
 
 USE SCHEMA silver;
 

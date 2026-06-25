@@ -12,7 +12,7 @@
 --   - only dim_customer + dim_product cross the network (broadcast once),
 --   - the line-grain fact_sales is NOT re-partitioned.
 --
--- Teaching point: broadcast wins when one side is small enough to fit in memory.
+-- Key point: broadcast wins when one side is small enough to fit in memory.
 -- If you broadcast something too large you get memory pressure / spill instead,
 -- so broadcast is a tool, not a default.
 
