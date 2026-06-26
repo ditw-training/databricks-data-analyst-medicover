@@ -22,10 +22,6 @@ __pycache__/
 
 # Local build/source materials not required for notebook testing
 scripts/
-!scripts/
-scripts/*
-!scripts/data-quality-issues-and-fixes.md
-!scripts/data-quality-issues-and-fixes.html
 presentation/
 tools/
 _old/
