@@ -22,6 +22,10 @@ __pycache__/
 
 # Local build/source materials not required for notebook testing
 scripts/
+!scripts/
+scripts/*
+!scripts/data-quality-issues-and-fixes.md
+!scripts/data-quality-issues-and-fixes.html
 presentation/
 tools/
 _old/
@@ -32,11 +36,6 @@ notebooks/*.ipynb
 data/source_csv/
 
 # Planning, build notes and prompt drafts are local-only.
-# Keep only docs/templates because active notebooks reference them.
-docs/*
-!docs/templates/
-!docs/templates/**
-
 # Keep only images used by active demo/workshop notebooks.
 assets/images/*
 !assets/images/architecture_patterns_to_powerbi.png
